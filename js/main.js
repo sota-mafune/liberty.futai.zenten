@@ -1,15 +1,9 @@
 var allData = [];
-var loggedInStoreName = ""; 
+var staffStatsMaster = {}, storeStatsMaster = {}, storeGroupMap = {}, staffStoreMap = {};
+var storeToGroup = { "神戸店":"兵四", "久米窪田店":"兵四", "高知高須店":"兵四", "北久米店":"兵四", "尼崎店":"兵四", "高槻店":"大阪", "八尾店":"大阪", "堺大泉緑地前店":"大阪", "松原天美店":"大阪", "貝塚店":"大阪", "大津店":"滋三", "栗東店":"滋三", "彦根店":"滋三", "津店":"滋三", "松阪店":"滋三", "鯖江店":"滋三", "久御山店":"京奈", "171店":"京奈", "精華店":"京奈", "西大和店":"京奈", "橿原店":"京奈", "熊本インター店":"旧Dj", "長田店":"旧Dj", "outlet店":"旧Dj", "舞鶴店":"旧Dj", "福知山店":"旧Dj", "加古川店":"旧Dj", "BYD滋賀":"未所属" };
 var targetMonth = "";
 
-ZOHO.embeddedApp.init().then(async function() {
-    try {
-        const userRes = await ZOHO.CRM.CONFIG.getCurrentUser();
-        if(userRes.users && userRes.users.length > 0) {
-            loggedInStoreName = userRes.users[0].full_name; 
-        }
-    } catch(e) { console.error("ユーザー取得エラー", e); }
-
+ZOHO.embeddedApp.init().then(function() {
     initMonthSelector();
     targetMonth = document.getElementById('month-selector').value;
     fetchAllRecords(1);
@@ -45,50 +39,15 @@ function fetchAllRecords(page) {
             if (res.info && res.info.more_records) {
                 fetchAllRecords(page + 1); 
             } else {
-                finishFetch();
+                renderAll();
             }
         } else {
-            finishFetch();
+            renderAll();
         }
     }).catch(function(e){
         console.error("データ取得エラー", e);
-        finishFetch();
+        renderAll();
     });
-}
-
-function finishFetch() {
-    updateStoreDropdown();
-    renderAll();
-}
-
-function updateStoreDropdown() {
-    let storeSet = new Set();
-    allData.forEach(r => { 
-        let st = r.ServiceStore || "未所属";
-        let stName = (st && typeof st === 'object') ? (st.name || "未所属") : st;
-        if (stName !== "未所属") storeSet.add(stName); 
-    });
-
-    if (loggedInStoreName && !storeSet.has(loggedInStoreName)) {
-        storeSet.add(loggedInStoreName);
-    }
-
-    let sel = document.getElementById('store-selector');
-    sel.innerHTML = '';
-    
-    let sortedStores = Array.from(storeSet).sort();
-    sortedStores.forEach(st => {
-        var o = document.createElement('option'); o.value = o.text = st; sel.add(o);
-    });
-
-    if (loggedInStoreName) {
-        for (let i = 0; i < sel.options.length; i++) {
-            if (sel.options[i].value === loggedInStoreName) {
-                sel.selectedIndex = i;
-                break;
-            }
-        }
-    }
 }
 
 function createStats() { return { j_k:0, j_f:0, v_n_k:0, v_n_f:0, sho_k:0, sho_f:0, ab_k:0, ab_f:0, jk_k:0, jk_f:0, rv_k:0, rv_f:0, rj_k:0, rj_f:0, tot_v_k:0, tot_v_f:0, n_k:0, n_f:0, m_k:0, m_f:0, c_k:0, c_f:0, o2_k:0, o2_f:0, o3_k:0, o3_f:0, pk_k:0, pk_f:0, ct_k:0, ct_f:0, up_k:0, up_f:0, tp_k:0, tp_f:0, ic_k:0, ic_f:0, rst_k:0, rst_f:0, ni_k:0, ni_f:0, nu_k:0, nu_f:0, hp_k:0, hp_f:0, fl_k:0, fl_f:0, aq_k:0, aq_f:0, tr_k:0, tr_f:0, ln_k:0, ln_f:0, l84_k:0, l84_f:0, r69_k:0, r69_f:0, r59_k:0, r59_f:0, r49_k:0, r49_f:0, r39_k:0, r39_f:0, r29_k:0, r29_f:0, low_k:0, low_f:0, zn_k:0, zn_f:0, ar21_k:0, ar21_f:0, ar22_k:0, ar22_f:0, ar23_k:0, ar23_f:0, ar24_k:0, ar24_f:0, ar25_k:0, ar25_f:0, ar_cnt_k:0, ar_cnt_f:0, g_sls:0 }; }
@@ -138,79 +97,60 @@ function aggregate(s, rec) {
 
 function renderAll() {
     document.getElementById('loading').style.display = 'none';
-    let selectedStore = document.getElementById('store-selector').value;
-    if(!selectedStore) return;
-
-    let staffStatsMaster = {};
-    let staffStoreMap = {};
-    let totalStats = createStats();
-    let dailyStats = {};
-
-    let p = targetMonth.split("-").map(Number);
-    let lastDay = new Date(p[0], p[1], 0).getDate();
-    for(let d=1; d<=lastDay; d++) {
-        let dtStr = targetMonth + "-" + ("0"+d).slice(-2);
-        dailyStats[dtStr] = createStats();
+    var gS = {}, totalS = createStats(); 
+    staffStatsMaster = {}; storeStatsMaster = {}; 
+    var groupSet = new Set(), storeSet = new Set();
+    
+    if(!allData || allData.length === 0) { 
+        document.getElementById("group-table-container").innerHTML = "<p style='padding:20px;'>データがありません。</p>"; 
+        return; 
     }
 
-    allData.forEach(r => {
+    allData.forEach(r => { 
         let st = r.ServiceStore || "未所属";
         let stName = (st && typeof st === 'object') ? (st.name || "未所属") : st;
-        let pr = "未設定";
-        if (r.ServicePerson) {
-            if (typeof r.ServicePerson === 'string') pr = r.ServicePerson;
-            else if (typeof r.ServicePerson === 'object') pr = r.ServicePerson.name || r.ServicePerson.full_name || "未設定";
-        }
-        if (!staffStatsMaster[pr]) staffStatsMaster[pr] = createStats();
-        if (stName !== "未所属") staffStoreMap[pr] = stName; 
-    });
-
-    let filteredStaffStats = {};
-    Object.keys(staffStatsMaster).forEach(pr => {
-        if (staffStoreMap[pr] === selectedStore) {
-            filteredStaffStats[pr] = createStats();
-        }
-    });
-
-    allData.forEach(r => {
-        let st = r.ServiceStore || "未所属";
-        let stName = (st && typeof st === 'object') ? (st.name || "未所属") : st;
-
-        if (stName !== selectedStore) return;
-
+        var gr = storeToGroup[stName] || "未所属";
+        
         let pr = "未設定";
         if (r.ServicePerson) {
             if (typeof r.ServicePerson === 'string') pr = r.ServicePerson;
             else if (typeof r.ServicePerson === 'object') pr = r.ServicePerson.name || r.ServicePerson.full_name || "未設定";
         }
 
-        if (!filteredStaffStats[pr]) filteredStaffStats[pr] = createStats();
-
-        aggregate(filteredStaffStats[pr], r);
-        aggregate(totalStats, r);
-
-        var c = (r.SyaryouCategory === "軽" || r.SyaryouCategory === "軽自動車") ? "k" : "f";
-        var vD = (r.VisitedDateTime || "").split('T')[0], cD = (r.ClosingDay || ""), isCancel = (r.cancel === true || r.cancel === "true");
-
-        if (vD && vD.indexOf(targetMonth) !== -1) { 
-            if(dailyStats[vD]){ let ds = dailyStats[vD]; ds["tot_v_"+c]++; if (r.FOrR === "初回") ds["v_n_"+c]++; if (r.Seated === "〇") ds["sho_"+c]++; if (r.FOrR === "再来") ds["rv_"+c]++; }
-        }
-        if (cD && cD.indexOf(targetMonth) !== -1 && !isCancel) { 
-            if(dailyStats[cD]) dailyStats[cD]["j_"+c]++; 
-        }
+        if(!gS[gr]) gS[gr] = createStats(); 
+        if(!storeStatsMaster[stName]) storeStatsMaster[stName] = createStats(); 
+        if(!staffStatsMaster[pr]) staffStatsMaster[pr] = createStats(); 
+        
+        storeGroupMap[stName] = gr; 
+        staffStoreMap[pr] = stName; 
+        groupSet.add(gr); 
+        storeSet.add(stName); 
+        
+        [gS[gr], storeStatsMaster[stName], staffStatsMaster[pr], totalS].forEach(s => aggregate(s, r)); 
     });
 
-    document.getElementById("left-table-container").innerHTML = buildTable(filteredStaffStats, "担当者名", totalStats);
-    document.getElementById("right-table-container").innerHTML = buildDailyTable(dailyStats, totalStats);
+    updateSelector('group-selector', groupSet, '全グループ表示'); 
+    updateSelector('store-selector', storeSet, '全店舗表示');
+    
+    document.getElementById("group-table-container").innerHTML = buildTable(gS, "グループ名", totalS);
+    filterStoreByGroup(); 
+    filterStaffByStore();
+}
+
+function updateSelector(id, set, def) { 
+    var sel = document.getElementById(id); 
+    sel.innerHTML = '<option value="all">' + def + '</option>'; 
+    Array.from(set).sort().forEach(v => { var o = document.createElement('option'); o.value = o.text = v; sel.add(o); }); 
 }
 
 function buildTable(sum, title, totalS) {
     var keys = Object.keys(sum).sort();
     
-    // ★ここが最重要！左上の「見出し」と「合計」の優先順位（z-index）を300にして最強にします！
+    // ★ここが最重要修正！ 左上の見出しの重なり（z-index）を最強にして沈まないようにします！
     var h = "<table><thead><tr>";
     h += "<th class='sticky-col-item shop-header' style='position: sticky; z-index: 300; top: 0; left: 0;'>" + (title || "KPI項目") + "</th>";
     h += "<th class='sticky-col-total shop-header' style='position: sticky; z-index: 290; top: 0; left: 170px;'>合計</th>";
+    
     for(var i=0; i<keys.length; i++) {
         h += "<th class='shop-header' style='position: sticky; z-index: 150; top: 0;'>" + keys[i] + "</th>";
     }
@@ -236,7 +176,7 @@ function buildTable(sum, title, totalS) {
     for(var j=0; j<rowDef.length; j++){ 
         var r = rowDef[j]; 
         if(r.sec) {
-            // ★灰色の帯もスクロールに負けないように「z-index」と「left」を指定して3つに分割！
+            // ★灰色の帯もスクロールに負けないように左2つを分離して完全固定
             h += "<tr>";
             h += "<td class='sticky-col-item section-row' style='position: sticky; z-index: 180; left: 0; border-right: none;'>" + r.sec + "</td>";
             h += "<td class='sticky-col-total section-row' style='position: sticky; z-index: 170; left: 170px; border-left: none;'></td>";
@@ -280,17 +220,18 @@ function renderCell(s, r, isT) {
     }
 }
 
-function buildDailyTable(dStats, tStats) {
-    var days = Object.keys(dStats).sort(), weekDays = ["日", "月", "火", "水", "木", "金", "土"];
-    var h = "<table class='daily-table'><thead><tr><th rowspan='2' style='min-width:30px; left:0; z-index:110;'>日</th><th rowspan='2' style='min-width:30px; left:30px; z-index:110;'>曜</th><th rowspan='2'>新規<br>来場</th><th rowspan='2'>再<br>来場</th><th rowspan='2'>総<br>来場</th><th rowspan='2' class='bg-yellow'>予算</th><th rowspan='2' class='bg-yellow'>着地<br>予想</th><th rowspan='2'>実績</th><th rowspan='2'>予算<br>進捗</th><th rowspan='2'>着地<br>予想<br>進捗</th><th rowspan='2'>商談<br>数</th><th rowspan='2'>商談<br>率</th><th rowspan='2'>成約<br>率</th><th rowspan='2' style='background:#ccc;'>昨年<br>新規</th><th rowspan='2' style='background:#ccc;'>昨年<br>総</th><th rowspan='2' style='background:#ccc;'>昨年<br>成約</th><th colspan='3' class='th-group-kei'>軽自動車</th><th colspan='3' class='th-group-fu'>普通車</th></tr><tr><th class='th-group-kei'>新規<br>来場</th><th class='th-group-kei'>再<br>来場</th><th class='th-group-kei'>実績</th><th class='th-group-fu'>新規<br>来場</th><th class='th-group-fu'>再<br>来場</th><th class='th-group-fu'>実績</th></tr></thead><tbody>";
-    days.forEach(d => {
-        var s = dStats[d], dateObj = new Date(d), dayNum = dateObj.getDate(), weekIdx = dateObj.getDay(), weekStr = weekDays[weekIdx], dayClass = (weekIdx === 0) ? "day-sun" : (weekIdx === 6) ? "day-sat" : "";
-        var vn = s.v_n_k + s.v_n_f, rv = s.rv_k + s.rv_f, tot = s.tot_v_k + s.tot_v_f, j = s.j_k + s.j_f, sho = s.sho_k + s.sho_f;
-        var sho_r = vn > 0 ? Math.round(sho / vn * 100) + "%" : "-", j_r = vn > 0 ? Math.round(j / vn * 100) + "%" : "-";
-        h += "<tr><td class='center' style='position:sticky; left:0; background:#fff; z-index:90;'>"+dayNum+"</td><td class='center "+dayClass+"' style='position:sticky; left:30px; background:#fff; z-index:90;'>"+weekStr+"</td><td>"+(vn||"")+"</td><td>"+(rv||"")+"</td><td>"+(tot||"")+"</td><td class='bg-yellow'>-</td><td class='bg-yellow'>-</td><td>"+(j||"")+"</td><td>-</td><td>-</td><td>"+(sho||"")+"</td><td>"+sho_r+"</td><td>"+j_r+"</td><td style='background:#f2f2f2;'>-</td><td style='background:#f2f2f2;'>-</td><td style='background:#f2f2f2;'>-</td><td>"+(s.v_n_k||"")+"</td><td>"+(s.rv_k||"")+"</td><td>"+(s.j_k||"")+"</td><td>"+(s.v_n_f||"")+"</td><td>"+(s.rv_f||"")+"</td><td>"+(s.j_f||"")+"</td></tr>";
-    });
-    var tvn = tStats.v_n_k + tStats.v_n_f, trv = tStats.rv_k + tStats.rv_f, ttot = tStats.tot_v_k + tStats.tot_v_f, tj = tStats.j_k + tStats.j_f, tsho = tStats.sho_k + tStats.sho_f;
-    var tsho_r = tvn > 0 ? Math.round(tsho / tvn * 100) + "%" : "-", tj_r = tvn > 0 ? Math.round(tj / tvn * 100) + "%" : "-";
-    h += "<tr class='daily-total-row'><td colspan='2' class='center' style='position:sticky; left:0; z-index:90;'>合計</td><td>"+tvn+"</td><td>"+trv+"</td><td>"+ttot+"</td><td class='bg-yellow'>-</td><td class='bg-yellow'>-</td><td>"+tj+"</td><td>-</td><td>-</td><td>"+tsho+"</td><td>"+tsho_r+"</td><td>"+tj_r+"</td><td>-</td><td>-</td><td>-</td><td>"+tStats.v_n_k+"</td><td>"+tStats.rv_k+"</td><td>"+tStats.j_k+"</td><td>"+tStats.v_n_f+"</td><td>"+tStats.rv_f+"</td><td>"+tStats.j_f+"</td></tr></tbody></table>";
-    return h;
+// ★タブ切り替え時の色変更もバッチリ直ってます
+function showPage(id) { 
+    document.querySelectorAll('.page-content').forEach(function(p){ p.classList.remove('active'); }); 
+    document.getElementById(id).classList.add('active'); 
+    
+    document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); });
+    var btnId = 'btn-' + id.replace('-page', '');
+    document.getElementById(btnId).classList.add('active');
+
+    document.getElementById('group-filter-area').style.display = (id === 'store-page') ? 'flex' : 'none'; 
+    document.getElementById('staff-filter-area').style.display = (id === 'staff-page') ? 'flex' : 'none'; 
 }
+
+function filterStoreByGroup() { var g = document.getElementById('group-selector').value, f = {}, t = createStats(); Object.keys(storeStatsMaster).forEach(function(st){ if (g === "all" || storeGroupMap[st] === g) { f[st] = storeStatsMaster[st]; Object.keys(t).forEach(function(k){ if(typeof t[k] === 'number') t[k] += storeStatsMaster[st][k]; }); } }); document.getElementById("store-table-container").innerHTML = buildTable(f, "店舗名", t); }
+function filterStaffByStore() { var s = document.getElementById('store-selector').value, f = {}, t = createStats(); Object.keys(staffStatsMaster).forEach(function(n){ if (s === "all" || staffStoreMap[n] === s) { f[n] = staffStatsMaster[n]; Object.keys(t).forEach(function(k){ if(typeof t[k] === 'number') t[k] += staffStatsMaster[n][k]; }); } }); document.getElementById("staff-table-container").innerHTML = buildTable(f, "担当者名", t); }
