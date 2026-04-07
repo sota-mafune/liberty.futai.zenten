@@ -72,7 +72,15 @@ function buildTable(sum, title, totalS) {
 
     for(var j=0; j<rowDef.length; j++){ 
         var r = rowDef[j]; 
-        if(r.sec) h += "<tr><td colspan='"+(keys.length+2)+"' class='section-row'>"+r.sec+"</td></tr>";
+        if(r.sec) {
+            // ★ ここが修正の心臓部！帯を「固定する左側」と「スクロールする右側」に分割します
+            h += "<tr>";
+            h += "<td colspan='2' class='section-row' style='border-right: 2px solid #444; z-index: 180;'>" + r.sec + "</td>";
+            if (keys.length > 0) {
+                h += "<td colspan='" + keys.length + "' class='section-row' style='position: static; border-left: none;'></td>";
+            }
+            h += "</tr>";
+        }
         else {
             h += "<tr><td class='sticky-col-item' style='background-color:"+(r.cls||"#fff")+"'>"+r.lbl+"</td>";
             h += renderCell(totalS, r, true); 
