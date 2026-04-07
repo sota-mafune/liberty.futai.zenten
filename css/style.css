@@ -1,22 +1,19 @@
-body { font-family: "Meiryo", sans-serif; font-size: 10px; margin: 0; background-color: #f4f7f6; color: #333; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-.header-container { background: #fff; padding: 10px; border-bottom: 2px solid #ccc; display: flex; align-items: center; gap: 15px; z-index: 2000; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-.filter-group { display: flex; align-items: center; gap: 10px; font-weight: bold; font-size: 12px; }
-select { padding: 4px 10px; border-radius: 4px; border: 1px solid #999; font-size: 12px; font-weight: bold; cursor: pointer; }
-.main-content { display: flex; flex: 1; overflow: hidden; width: 100vw; }
-.left-pane { width: 45%; overflow: auto; border-right: 3px solid #666; background: #fff; }
-.right-pane { width: 55%; overflow: auto; background: #fff; }
-
-/* ★ここが重要：border-boxを追加して幅計算を狂わせない */
+@charset "UTF-8";
+body { font-family: "Meiryo", sans-serif; font-size: 10px; margin: 0; background-color: #f4f7f6; color: #333; overflow: hidden; }
+.tab-menu-container { position: sticky; top: 0; z-index: 2000; background: #fff; padding: 10px; border-bottom: 2px solid #ccc; display: flex; align-items: center; justify-content: space-between; }
+.tab-btn-group { display: flex; gap: 5px; }
+.tab-btn { padding: 6px 15px; cursor: pointer; border: 1px solid #ccc; background: #eee; font-weight: bold; border-radius: 4px; font-size: 11px; }
+.tab-btn.active { background: #2c3e50; color: white; border-color: #2c3e50; }
+.filter-group { display: flex; align-items: center; gap: 10px; font-weight: bold; font-size: 11px; }
+.date-input { padding: 2px 5px; border-radius: 4px; border: 1px solid #999; font-size: 11px; }
+select { padding: 3px 8px; border-radius: 4px; border: 1px solid #999; font-size: 11px; }
+.table-wrapper { overflow: auto; height: calc(100vh - 65px); width: 100vw; }
 table { border-collapse: separate; border-spacing: 0; width: max-content; background: white; table-layout: fixed; }
 th, td { border: 1px solid #d9d9d9; padding: 0; text-align: center; white-space: nowrap; box-sizing: border-box; }
-
+.sticky-col-item { position: sticky; left: 0; background-color: #f2f2f2; font-weight: bold; z-index: 100; border-right: 2px solid #444; width: 170px; min-width: 170px; text-align: left; padding-left: 5px; }
+.sticky-col-total { position: sticky; left: 170px; background-color: #fff9e6; font-weight: bold; z-index: 90; border-right: 2px solid #444; width: 105px; min-width: 105px; }
 .shop-header { background-color: #44546a; color: white; height: 35px; position: sticky; top: 0; z-index: 150; }
-.sticky-col-item { position: sticky; left: 0; background-color: #f2f2f2; font-weight: bold; z-index: 100; border-right: 2px solid #444; width: 150px; min-width: 150px; text-align: left; padding-left: 5px; }
-.sticky-col-total { position: sticky; left: 150px; background-color: #fff9e6; font-weight: bold; z-index: 90; border-right: 2px solid #444; width: 85px; min-width: 85px; }
-
-/* ★ここが重要：帯専用のデザイン（固定はHTML側のクラスに任せる） */
 .section-row { background-color: #adb9ca !important; font-weight: bold; text-align: left; padding: 4px 10px; color: black !important; font-size: 11px; }
-
 .cell-stack { display: flex; flex-direction: column; width: 100%; height: 100%; justify-content: center; text-align: center; }
 .stack-upper { display: flex; width: 100%; border-bottom: 1px dotted #d9d9d9; height: 18px; line-height: 18px; }
 .val-kei { color: #0070c0; width: 50%; border-right: 1px dotted #d9d9d9; font-size: 9px; text-align: center; }
@@ -28,13 +25,5 @@ th, td { border: 1px solid #d9d9d9; padding: 0; text-align: center; white-space:
 .bg-sou-upper { background-color: #ead1dc !important; font-weight: bold; height: 20px; line-height: 20px; font-size: 10px; border-bottom: 1px solid #d9d9d9 !important; text-align: center; display: flex; align-items: center; justify-content: center; }
 .bg-sou-lower { background-color: #ffffff !important; font-weight: normal; height: 18px; line-height: 18px; border-top: 1px solid #d9d9d9; display: flex; justify-content: center; }
 .force-red { color: #ff0000 !important; }
-.daily-table th { background: #5b6770; color: white; padding: 4px 8px; border: 1px solid #999; font-size: 10px; position: sticky; top: 0; z-index: 100; }
-.daily-table td { border: 1px solid #ccc; padding: 4px; text-align: right; background: #fff; }
-.daily-table td.center { text-align: center; }
-.th-group-kei { background: #444 !important; }
-.th-group-fu { background: #666 !important; }
-.day-sat { color: #0070c0; font-weight: bold; }
-.day-sun { color: #c00000; font-weight: bold; }
-.bg-yellow { background-color: #fff2cc !important; }
-.daily-total-row td { background-color: #e2efda !important; font-weight: bold; border-top: 2px solid #5b6770; }
-#loading { position: fixed; top: 50px; left: 20px; padding: 10px 20px; background: rgba(255,255,255,0.9); color: #e67e22; font-weight: bold; border-radius: 4px; box-shadow: 0 0 10px rgba(0,0,0,0.2); z-index: 3000; }
+#loading { padding: 20px; color: #e67e22; font-weight: bold; }
+.page-content { display: none; } .page-content.active { display: block; }
