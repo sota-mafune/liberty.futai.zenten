@@ -206,7 +206,9 @@ function renderAll() {
 
 function buildTable(sum, title, totalS) {
     var keys = Object.keys(sum).sort();
-    var h = "<table><thead><tr><th class='sticky-col-item shop-header'>" + title + "</th><th class='sticky-col-total shop-header'>合計</th>";
+    
+    // 【修正1】一番上の見出し（店舗名・合計）がスクロールの下に潜り込まないように z-index を高くする！
+    var h = "<table><thead><tr><th class='sticky-col-item shop-header' style='z-index: 200;'>" + title + "</th><th class='sticky-col-total shop-header' style='z-index: 190;'>合計</th>";
     for(var i=0; i<keys.length; i++) h += "<th class='shop-header'>" + keys[i] + "</th>";
     h += "</tr></thead><tbody>";
 
@@ -230,15 +232,12 @@ function buildTable(sum, title, totalS) {
     for(var j=0; j<rowDef.length; j++){ 
         var r = rowDef[j]; 
         if(r.sec) {
-            // ★ ここが固定を完璧にする修正部分：帯を3つのセルに分割して出力する！
+            // 【修正2】帯を3分割して、固定列とスクロール列を完全に分離する！
             h += "<tr>";
-            // 1. 固定する項目名列（left: 0）
             h += "<td class='sticky-col-item section-row' style='z-index: 180; border-right: none;'>" + r.sec + "</td>";
-            // 2. 固定する合計列（left: 150px）
             h += "<td class='sticky-col-total section-row' style='z-index: 180; border-left: none;'></td>";
-            // 3. 一緒にスクロールするデータ列
             if (keys.length > 0) {
-                h += "<td colspan='" + keys.length + "' class='section-row'></td>";
+                h += "<td colspan='" + keys.length + "' class='section-row' style='position: static; z-index: 1; border-left: none;'></td>";
             }
             h += "</tr>";
         }
