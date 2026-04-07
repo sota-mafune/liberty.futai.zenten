@@ -11,7 +11,7 @@ select { padding: 3px 8px; border-radius: 4px; border: 1px solid #999; font-size
 
 table { border-collapse: separate; border-spacing: 0; width: max-content; background: white; table-layout: fixed !important; }
 
-/* 全セル共通 */
+/* 全てのセルに強制的に幅を指定 */
 th, td { 
     border: 1px solid #d9d9d9; 
     padding: 0; 
@@ -26,21 +26,30 @@ th, td {
 
 /* 1列目：項目名固定 */
 .sticky-col-item { 
-    position: sticky !important; left: 0 !important; 
-    background-color: #f2f2f2 !important; 
-    font-weight: bold; z-index: 110 !important; 
+    position: sticky !important; 
+    left: 0 !important; 
+    background-color: #f2f2f2; 
+    font-weight: bold; 
+    z-index: 110 !important; 
     border-right: 2px solid #444 !important; 
-    width: 170px !important; min-width: 170px !important; max-width: 170px !important; 
-    text-align: left; padding-left: 5px; 
+    width: 170px !important; 
+    min-width: 170px !important; 
+    max-width: 170px !important; 
+    text-align: left; 
+    padding-left: 5px; 
 }
 
 /* 2列目：合計列固定 */
 .sticky-col-total { 
-    position: sticky !important; left: 170px !important; 
-    background-color: #fff9e6 !important; 
-    font-weight: bold; z-index: 100 !important; 
+    position: sticky !important; 
+    left: 170px !important; 
+    background-color: #fff9e6; 
+    font-weight: bold; 
+    z-index: 100 !important; 
     border-right: 2px solid #444 !important; 
-    width: 105px !important; min-width: 105px !important; max-width: 105px !important; 
+    width: 105px !important; 
+    min-width: 105px !important; 
+    max-width: 105px !important; 
 }
 
 .shop-header { background-color: #44546a; color: white; height: 35px; position: sticky; top: 0; z-index: 150; }
