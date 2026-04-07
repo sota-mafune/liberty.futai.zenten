@@ -48,8 +48,15 @@ function updateSelector(id, set, def) { var sel = document.getElementById(id); s
 
 function buildTable(sum, title, totalS) {
     var keys = Object.keys(sum).sort();
-    var h = "<table><thead><tr><th class='sticky-col-item shop-header'>" + (title || "KPI項目") + "</th><th class='sticky-col-total shop-header'>合計</th>";
-    for(var i=0; i<keys.length; i++) h += "<th class='shop-header'>" + keys[i] + "</th>";
+    
+    // 【修正1】1行目（店舗名・合計）を固定するために、z-indexを最強(300)にして絶対配置
+    var h = "<table><thead><tr>";
+    h += "<th class='sticky-col-item shop-header' style='position: sticky; z-index: 300; top: 0; left: 0;'>" + (title || "KPI項目") + "</th>";
+    h += "<th class='sticky-col-total shop-header' style='position: sticky; z-index: 290; top: 0; left: 170px;'>合計</th>";
+    
+    for(var i=0; i<keys.length; i++) {
+        h += "<th class='shop-header' style='position: sticky; z-index: 150; top: 0;'>" + keys[i] + "</th>";
+    }
     h += "</tr></thead><tbody>";
 
     const rowDef = [
@@ -71,7 +78,16 @@ function buildTable(sum, title, totalS) {
 
     for(var j=0; j<rowDef.length; j++){ 
         var r = rowDef[j]; 
-        if(r.sec) h += "<tr><td colspan='"+(keys.length+2)+"' class='section-row'>"+r.sec+"</td></tr>";
+        if(r.sec) {
+            // 【修正2】灰色の帯も分割して固定。巨大な1つのセル(colspan)にしないことで固定を維持。
+            h += "<tr>";
+            h += "<td class='sticky-col-item section-row' style='position: sticky; z-index: 180; left: 0; border-right: none;'>" + r.sec + "</td>";
+            h += "<td class='sticky-col-total section-row' style='position: sticky; z-index: 170; left: 170px; border-left: none;'></td>";
+            if (keys.length > 0) {
+                h += "<td colspan='" + keys.length + "' class='section-row' style='position: static; z-index: 1; border-left: none;'></td>";
+            }
+            h += "</tr>";
+        }
         else {
             h += "<tr><td class='sticky-col-item' style='background-color:"+(r.cls||"#fff")+"'>"+r.lbl+"</td>";
             h += renderCell(totalS, r, true); 
@@ -81,7 +97,6 @@ function buildTable(sum, title, totalS) {
     }
     h += "</tbody></table>"; return h;
 }
-
 function renderCell(s, r, isT) {
     var kVal = "-", fVal = "-", tVal = "-", bg = r.cls || "#ffffff", textClass = r.redText ? "force-red" : "";
     var c = isT ? "sticky-col-total " : "";
