@@ -122,6 +122,21 @@ function renderCell(s, r, isT) {
         return "<td class='"+c+"' style='background-color:"+bg+"'><div class='cell-stack "+textClass+"'><div class='stack-upper' style='display:flex;'><div class='val-kei'>"+kVal+"</div><div class='val-fu'>"+fVal+"</div></div><div class='stack-lower'>"+tVal+"</div></div></td>";
     }
 }
-function showPage(id) { document.querySelectorAll('.page-content').forEach(function(p){ p.classList.remove('active'); }); document.getElementById(id).classList.add('active'); document.getElementById('group-filter-area').style.display = (id === 'store-page') ? 'flex' : 'none'; document.getElementById('staff-filter-area').style.display = (id === 'staff-page') ? 'flex' : 'none'; }
+function showPage(id) { 
+    // 1. ページの表示/非表示を切り替える
+    document.querySelectorAll('.page-content').forEach(function(p){ p.classList.remove('active'); }); 
+    document.getElementById(id).classList.add('active'); 
+
+    // ★追加：タブボタンの色（activeクラス）を付け替える
+    document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); });
+    // クリックされたID（例：store-page）から、ボタンのID（例：btn-store）を特定して色をつける
+    var btnId = 'btn-' + id.replace('-page', '');
+    var targetBtn = document.getElementById(btnId);
+    if(targetBtn) targetBtn.classList.add('active');
+
+    // 3. フィルターエリアの表示/非表示を切り替える
+    document.getElementById('group-filter-area').style.display = (id === 'store-page') ? 'flex' : 'none'; 
+    document.getElementById('staff-filter-area').style.display = (id === 'staff-page') ? 'flex' : 'none'; 
+}
 function filterStoreByGroup() { var g = document.getElementById('group-selector').value, f = {}, t = createStats(); Object.keys(storeStatsMaster).forEach(function(st){ if (g === "all" || storeGroupMap[st] === g) { f[st] = storeStatsMaster[st]; Object.keys(t).forEach(function(k){ if(typeof t[k] === 'number') t[k] += storeStatsMaster[st][k]; }); } }); document.getElementById("store-table-container").innerHTML = buildTable(f, "店舗名", t); }
 function filterStaffByStore() { var s = document.getElementById('store-selector').value, f = {}, t = createStats(); Object.keys(staffStatsMaster).forEach(function(n){ if (s === "all" || staffStoreMap[n] === s) { f[n] = staffStatsMaster[n]; Object.keys(t).forEach(function(k){ if(typeof t[k] === 'number') t[k] += staffStatsMaster[n][k]; }); } }); document.getElementById("staff-table-container").innerHTML = buildTable(f, "担当者名", t); }
