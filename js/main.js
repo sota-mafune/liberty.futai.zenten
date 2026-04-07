@@ -50,36 +50,34 @@ function updateSelector(id, set, def) { var sel = document.getElementById(id); s
 function buildTable(sum, title, totalS) {
     var keys = Object.keys(sum).sort();
     
-    // 【修正箇所】見出しセルの position と z-index を指定
     var h = "<table><thead><tr>";
     h += "<th class='sticky-col-item shop-header' style='position: sticky !important; z-index: 300 !important; top: 0; left: 0;'>" + (title || "KPI項目") + "</th>";
     h += "<th class='sticky-col-total shop-header' style='position: sticky !important; z-index: 290 !important; top: 0; left: 170px;'>合計</th>";
     for(var i=0; i<keys.length; i++) {
-        h += "<th class='shop-header' style='position: sticky !important; z-index: 150; top: 0;'>" + keys[i] + "</th>";
+        h += "<th class='shop-header' style='position: sticky !important; z-index: 150 !important; top: 0;'>" + keys[i] + "</th>";
     }
     h += "</tr></thead><tbody>";
 
     const rowDef = [
-        { sec: "予算・目標" }, { lbl: "予算", m: "empty", cls: "#ffffff" }, { lbl: "目標", m: "empty", cls: "#ffffff" }, { lbl: "昨年実績", m: "empty", cls: "#ffffff" }, { lbl: "現時点予算", m: "empty", cls: "#ffffff" },
-        { sec: "基本実績" }, { lbl: "実績", m: "j", cls: "#ffe599" }, { lbl: "達成率", type: "ratio", n: "j", d: "g_sls", cls: "#ffffff" }, { lbl: "昨年実績(当日)", m: "empty", cls: "#d9d2e9" }, { lbl: "昨年対比", m: "empty", cls: "#d9d2e9" },
-        { lbl: "新規接客数", m: "v_n", cls: "#ffffff" }, { lbl: "昨年接客数(当日)", m: "empty", cls: "#d9d2e9" }, { lbl: "商談件数", m: "sho", cls: "#ffffff" }, { lbl: "商談率", type: "ratio", n: "sho", d: "v_n", cls: "#ffe599" },
-        { lbl: "AB数", m: "ab", cls: "#ffffff" }, { lbl: "AB率", type: "ratio", n: "ab", d: "sho", cls: "#ffffff" }, { lbl: "即決成約", m: "jk", cls: "#ffffff" }, { lbl: "即決率", type: "ratio", n: "jk", d: "v_n", cls: "#ffffff" },
-        { lbl: "成約率", type: "ratio", n: "j", d: "v_n", cls: "#ffe599", redText: true }, { lbl: "昨年成約率", m: "empty", cls: "#d9d2e9" },
-        { lbl: "再来接客数", m: "rv", cls: "#ffffff" }, { lbl: "再来店率", type: "custom_ratio", n: "rv", d_sub: ["v_n", "jk"], cls: "#ffffff" },
-        { lbl: "再来成約", m: "rj", cls: "#ffffff" }, { lbl: "再来成約率", type: "custom_ratio", n: "rj", d_sub: ["v_n", "jk"], cls: "#ffffff" },
-        { lbl: "総接客数", m: "tot_v", cls: "#ffffff" }, { lbl: "総成約率", type: "ratio", n: "j", d: "tot_v", cls: "#ffffff" },
-        { lbl: "追客可能数", type: "diff", n: "v_n", d: "j", cls: "#f4cccc" }, { lbl: "決着済", m: "empty", cls: "#f4cccc" }, { lbl: "決着率", m: "empty", cls: "#f4cccc" },
-        { sec: "販売区分" }, { lbl: "新車", m: "n", cls: "#b6d7a8" }, { lbl: "獲得率", type: "ratio", n: "n", d: "j", cls: "#ffffff" }, { lbl: "未使用車", m: "m", cls: "#b6d7a8" }, { lbl: "獲得率", type: "ratio", n: "m", d: "j", cls: "#ffffff" }, { lbl: "中古車", m: "c", cls: "#b6d7a8" }, { lbl: "獲得率", type: "ratio", n: "c", d: "j", cls: "#ffffff" },
-        { sec: "付帯品個別" }, { lbl: "10年保証", m: "o2", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "o2", d: "j", cls: "#ffffff" }, { lbl: "中古保証", m: "o3", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "o3", d: "j", cls: "#ffffff" }, { lbl: "パック", m: "pk", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "pk", d: "j", cls: "#ffffff" }, { lbl: "コーティング", m: "ct", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "ct", d: "j", cls: "#ffffff" }, { lbl: "UPグレード", m: "up", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "up", d: "j", cls: "#ffffff" }, { lbl: "T-プレミアム", m: "tp", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "tp", d: "j", cls: "#ffffff" }, { lbl: "室内コート", m: "ic", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "ic", d: "j", cls: "#ffffff" }, { lbl: "防錆コート", m: "rst", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "rst", d: "j", cls: "#ffffff" }, { lbl: "ナビ取付", m: "ni", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "ni", d: "j", cls: "#ffffff" }, { lbl: "ナビアップ", m: "nu", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "nu", d: "j", cls: "#ffffff" }, { lbl: "希望ナンバー", m: "hp", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "hp", d: "j", cls: "#ffffff" }, { lbl: "フィルム", m: "fl", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "fl", d: "j", cls: "#ffffff" }, { lbl: "アクアペル", m: "aq", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "aq", d: "j", cls: "#ffffff" }, { lbl: "下取り", m: "tr", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "tr", d: "j", cls: "#ffffff" },
-        { sec: "総付帯実績" }, { lbl: "車両総付帯", type: "sum", items: ["ct","up","tp","ic","rst","nu","fl","aq"], cls: "#a2c4c9" }, { lbl: "獲得率", type: "sum_ratio", items: ["ct","up","tp","ic","rst","nu","fl","aq"], d: "j", cls: "#ffffff" }, { lbl: "周辺総付帯", type: "sum", items: ["n","tr","ln","r69"], cls: "#a2c4c9" }, { lbl: "獲得率", type: "sum_ratio", items: ["n","tr","ln","r69"], d: "j", cls: "#ffffff" },
-        { sec: "ローン実績" }, { lbl: "ローン", m: "ln", cls: "#a4c2f4" }, { lbl: "ローン獲得率", type: "ratio", n: "ln", d: "j", cls: "#ffffff" }, { lbl: "84回以上", m: "l84", cls: "#a4c2f4" }, { lbl: "獲得率", type: "ratio", n: "l84", d: "j", cls: "#ffffff" }, { lbl: "6.90%", m: "r69", cls: "#a4c2f4" }, { lbl: "獲得率", type: "ratio", n: "r69", d: "j", cls: "#ffffff" }, { lbl: "5.90%", m: "r59", cls: "#a4c2f4" }, { lbl: "獲得率", type: "ratio", n: "r59", d: "j", cls: "#ffffff" }, { lbl: "4.90%", m: "r49", cls: "#a4c2f4" }, { lbl: "獲得率", type: "ratio", n: "r49", d: "j", cls: "#ffffff" }, { lbl: "3.90%", m: "r39", cls: "#a4c2f4" }, { lbl: "獲得率", type: "ratio", n: "r39", d: "j", cls: "#ffffff" }, { lbl: "2.90%", m: "r29", cls: "#a4c2f4" }, { lbl: "獲得率", type: "ratio", n: "r29", d: "j", cls: "#ffffff" }, { lbl: "低金利", m: "low", cls: "#a4c2f4" }, { lbl: "獲得率", type: "ratio", n: "low", d: "j", cls: "#ffffff" }, { lbl: "残価設定", m: "zn", cls: "#a4c2f4" }, { lbl: "獲得率", type: "ratio", n: "zn", d: "j", cls: "#ffffff" },
-        { sec: "受注時想定" }, { lbl: "受注台数", type: "arari_val", val: "j", cls: "#ead1dc" }, { lbl: "@車両粗利", type: "arari_avg", val: "ar21", cls: "#ead1dc" }, { lbl: "@ローンBK", type: "arari_avg", val: "ar23", cls: "#ead1dc" }, { lbl: "@下取粗利", type: "arari_avg", val: "ar22", cls: "#ead1dc" }, { lbl: "@全部割(保証抜き)", type: "arari_avg", val: "ar24", cls: "#ead1dc" }, { lbl: "@全部割(保証込み)", type: "arari_avg", val: "ar25", cls: "#ead1dc" }, { lbl: "総粗利", type: "arari_sum", val: "ar25", cls: "#ead1dc" }
+        { sec: "予算・目標" }, { lbl: "予算", m: "empty" }, { lbl: "目標", m: "empty" }, { lbl: "昨年実績", m: "empty" }, { lbl: "現時点予算", m: "empty" },
+        { sec: "基本実績" }, { lbl: "実績", m: "j" }, { lbl: "達成率", type: "ratio", n: "j", d: "g_sls" }, { lbl: "昨年実績(当日)", m: "empty" }, { lbl: "昨年対比", m: "empty" },
+        { lbl: "新規接客数", m: "v_n" }, { lbl: "昨年接客数(当日)", m: "empty" }, { lbl: "商談件数", m: "sho" }, { lbl: "商談率", type: "ratio", n: "sho", d: "v_n" },
+        { lbl: "AB数", m: "ab" }, { lbl: "AB率", type: "ratio", n: "ab", d: "sho" }, { lbl: "即決成約", m: "jk" }, { lbl: "即決率", type: "ratio", n: "jk", d: "v_n" },
+        { lbl: "成約率", type: "ratio", n: "j", d: "v_n", redText: true }, { lbl: "昨年成約率", m: "empty" },
+        { lbl: "再来接客数", m: "rv" }, { lbl: "再来店率", type: "custom_ratio", n: "rv", d_sub: ["v_n", "jk"] },
+        { lbl: "再来成約", m: "rj" }, { lbl: "再来成約率", type: "custom_ratio", n: "rj", d_sub: ["v_n", "jk"] },
+        { lbl: "総接客数", m: "tot_v" }, { lbl: "総成約率", type: "ratio", n: "j", d: "tot_v" },
+        { lbl: "追客可能数", type: "diff", n: "v_n", d: "j" }, { lbl: "決着済", m: "empty" }, { lbl: "決着率", m: "empty" },
+        { sec: "販売区分" }, { lbl: "新車", m: "n" }, { lbl: "獲得率", type: "ratio", n: "n", d: "j" }, { lbl: "未使用車", m: "m" }, { lbl: "獲得率", type: "ratio", n: "m", d: "j" }, { lbl: "中古車", m: "c" }, { lbl: "獲得率", type: "ratio", n: "c", d: "j" },
+        { sec: "付帯品個別" }, { lbl: "10年保証", m: "o2" }, { lbl: "獲得率", type: "ratio", n: "o2", d: "j" }, { lbl: "中古保証", m: "o3" }, { lbl: "獲得率", type: "ratio", n: "o3", d: "j" }, { lbl: "パック", m: "pk" }, { lbl: "獲得率", type: "ratio", n: "pk", d: "j" }, { lbl: "コーティング", m: "ct" }, { lbl: "獲得率", type: "ratio", n: "ct", d: "j" }, { lbl: "UPグレード", m: "up" }, { lbl: "獲得率", type: "ratio", n: "up", d: "j" }, { lbl: "T-プレミアム", m: "tp" }, { lbl: "獲得率", type: "ratio", n: "tp", d: "j" }, { lbl: "室内コート", m: "ic" }, { lbl: "獲得率", type: "ratio", n: "ic", d: "j" }, { lbl: "防錆コート", m: "rst" }, { lbl: "獲得率", type: "ratio", n: "rst", d: "j" }, { lbl: "ナビ取付", m: "ni" }, { lbl: "獲得率", type: "ratio", n: "ni", d: "j" }, { lbl: "ナビアップ", m: "nu" }, { lbl: "獲得率", type: "ratio", n: "nu", d: "j" }, { lbl: "希望ナンバー", m: "hp" }, { lbl: "獲得率", type: "ratio", n: "hp", d: "j" }, { lbl: "フィルム", m: "fl" }, { lbl: "獲得率", type: "ratio", n: "fl", d: "j" }, { lbl: "アクアペル", m: "aq" }, { lbl: "獲得率", type: "ratio", n: "aq", d: "j" }, { lbl: "下取り", m: "tr" }, { lbl: "獲得率", type: "ratio", n: "tr", d: "j" },
+        { sec: "総付帯実績" }, { lbl: "車両総付帯", type: "sum", items: ["ct","up","tp","ic","rst","nu","fl","aq"] }, { lbl: "獲得率", type: "sum_ratio", items: ["ct","up","tp","ic","rst","nu","fl","aq"], d: "j" }, { lbl: "周辺総付帯", type: "sum", items: ["n","tr","ln","r69"] }, { lbl: "獲得率", type: "sum_ratio", items: ["n","tr","ln","r69"], d: "j" },
+        { sec: "ローン実績" }, { lbl: "ローン", m: "ln" }, { lbl: "ローン獲得率", type: "ratio", n: "ln", d: "j" }, { lbl: "84回以上", m: "l84" }, { lbl: "獲得率", type: "ratio", n: "l84", d: "j" }, { lbl: "6.90%", m: "r69" }, { lbl: "獲得率", type: "ratio", n: "r69", d: "j" }, { lbl: "5.90%", m: "r59" }, { lbl: "獲得率", type: "ratio", n: "r59", d: "j" }, { lbl: "4.90%", m: "r49" }, { lbl: "獲得率", type: "ratio", n: "r49", d: "j" }, { lbl: "3.90%", m: "r39" }, { lbl: "獲得率", type: "ratio", n: "r39", d: "j" }, { lbl: "2.90%", m: "r29" }, { lbl: "獲得率", type: "ratio", n: "r29", d: "j" }, { lbl: "低金利", m: "low" }, { lbl: "獲得率", type: "ratio", n: "low", d: "j" }, { lbl: "残価設定", m: "zn" }, { lbl: "獲得率", type: "ratio", n: "zn", d: "j" },
+        { sec: "受注時想定" }, { lbl: "受注台数", type: "arari_val", val: "j" }, { lbl: "@車両粗利", type: "arari_avg", val: "ar21" }, { lbl: "@ローンBK", type: "arari_avg", val: "ar23" }, { lbl: "@下取粗利", type: "arari_avg", val: "ar22" }, { lbl: "@全部割(保証抜き)", type: "arari_avg", val: "ar24" }, { lbl: "@全部割(保証込み)", type: "arari_avg", val: "ar25" }, { lbl: "総粗利", type: "arari_sum", val: "ar25" }
     ];
 
     for(var j=0; j<rowDef.length; j++){ 
         var r = rowDef[j]; 
         if(r.sec) {
-            // 【修正箇所】帯も分割して position: sticky を指定
             h += "<tr>";
             h += "<td class='sticky-col-item section-row' style='position: sticky !important; z-index: 180 !important; left: 0; border-right: none;'>" + r.sec + "</td>";
             h += "<td class='sticky-col-total section-row' style='position: sticky !important; z-index: 170 !important; left: 170px; border-left: none;'></td>";
@@ -89,7 +87,7 @@ function buildTable(sum, title, totalS) {
             h += "</tr>";
         }
         else {
-            h += "<tr><td class='sticky-col-item' style='background-color:"+(r.cls||"#fff")+"'>"+r.lbl+"</td>";
+            h += "<tr><td class='sticky-col-item'>" + r.lbl + "</td>";
             h += renderCell(totalS, r, true); 
             for(var k=0; k<keys.length; k++) h += renderCell(sum[keys[k]], r, false);
             h += "</tr>";
