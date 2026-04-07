@@ -123,16 +123,26 @@ function renderCell(s, r, isT) {
     }
 }
 function showPage(id) { 
-    // 1. ページの表示/非表示を切り替える
-    document.querySelectorAll('.page-content').forEach(function(p){ p.classList.remove('active'); }); 
+    // 1. 下の表（コンテンツ）を切り替える
+    document.querySelectorAll('.page-content').forEach(function(p){ 
+        p.classList.remove('active'); 
+    }); 
     document.getElementById(id).classList.add('active'); 
 
-    // ★追加：タブボタンの色（activeクラス）を付け替える
-    document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); });
-    // クリックされたID（例：store-page）から、ボタンのID（例：btn-store）を特定して色をつける
-    var btnId = 'btn-' + id.replace('-page', '');
-    var targetBtn = document.getElementById(btnId);
-    if(targetBtn) targetBtn.classList.add('active');
+    // 2. ★ボタンの色を切り替える（ここが重要！）
+    document.querySelectorAll('.tab-btn').forEach(function(b){ 
+        b.classList.remove('active'); 
+    });
+    
+    // 仕組み：id ('group-page') から '-page' を消して 'btn-' をつける
+    // 結果：'btn-group' というIDのボタンを探して active にする
+    var baseName = id.replace('-page', '');
+    var targetBtnId = 'btn-' + baseName;
+    var targetBtn = document.getElementById(targetBtnId);
+    
+    if (targetBtn) {
+        targetBtn.classList.add('active');
+    }
 
     // 3. フィルターエリアの表示/非表示を切り替える
     document.getElementById('group-filter-area').style.display = (id === 'store-page') ? 'flex' : 'none'; 
