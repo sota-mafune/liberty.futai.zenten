@@ -207,11 +207,13 @@ function renderAll() {
 function buildTable(sum, title, totalS) {
     var keys = Object.keys(sum).sort();
     
-    // ★修正ポイント1：一番上の行の「左端2つ」の重なり(z-index)を最強の300にして、絶対にスクロールに負けないようにする！
+    // ★ここが最重要！左上の「見出し」と「合計」の優先順位（z-index）を300にして最強にします！
     var h = "<table><thead><tr>";
-    h += "<th class='sticky-col-item shop-header' style='z-index: 300; top: 0; left: 0;'>" + (title || "KPI項目") + "</th>";
-    h += "<th class='sticky-col-total shop-header' style='z-index: 290; top: 0; left: 170px;'>合計</th>";
-    for(var i=0; i<keys.length; i++) h += "<th class='shop-header' style='z-index: 150; top: 0;'>" + keys[i] + "</th>";
+    h += "<th class='sticky-col-item shop-header' style='position: sticky; z-index: 300; top: 0; left: 0;'>" + (title || "KPI項目") + "</th>";
+    h += "<th class='sticky-col-total shop-header' style='position: sticky; z-index: 290; top: 0; left: 170px;'>合計</th>";
+    for(var i=0; i<keys.length; i++) {
+        h += "<th class='shop-header' style='position: sticky; z-index: 150; top: 0;'>" + keys[i] + "</th>";
+    }
     h += "</tr></thead><tbody>";
 
     const rowDef = [
@@ -234,12 +236,12 @@ function buildTable(sum, title, totalS) {
     for(var j=0; j<rowDef.length; j++){ 
         var r = rowDef[j]; 
         if(r.sec) {
-            // ★修正ポイント2：灰色の帯も3つのセルに分割し、左2つを固定エリアに配置する！
+            // ★灰色の帯もスクロールに負けないように「z-index」と「left」を指定して3つに分割！
             h += "<tr>";
-            h += "<td class='sticky-col-item section-row' style='z-index: 180; left: 0; border-right: none;'>" + r.sec + "</td>";
-            h += "<td class='sticky-col-total section-row' style='z-index: 170; left: 170px; border-left: none;'></td>";
+            h += "<td class='sticky-col-item section-row' style='position: sticky; z-index: 180; left: 0; border-right: none;'>" + r.sec + "</td>";
+            h += "<td class='sticky-col-total section-row' style='position: sticky; z-index: 170; left: 170px; border-left: none;'></td>";
             if (keys.length > 0) {
-                h += "<td colspan='" + keys.length + "' class='section-row' style='position: static; border-left: none;'></td>";
+                h += "<td colspan='" + keys.length + "' class='section-row' style='position: static; z-index: 1; border-left: none;'></td>";
             }
             h += "</tr>";
         }
