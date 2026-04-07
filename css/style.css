@@ -8,10 +8,9 @@ body { font-family: "Meiryo", sans-serif; font-size: 10px; margin: 0; background
 select { padding: 3px 8px; border-radius: 4px; border: 1px solid #999; font-size: 11px; }
 .table-wrapper { overflow: auto; height: calc(100vh - 65px); width: 100vw; }
 
-/* ★ 修正ポイント：table-layout: fixed を確実に効かせる */
 table { border-collapse: separate; border-spacing: 0; width: max-content; background: white; table-layout: fixed !important; }
 
-/* 全てのセルに強制的に幅を指定 */
+/* 全体の列幅（データ列）を100pxに固定 */
 th, td { 
     border: 1px solid #d9d9d9; 
     padding: 0; 
@@ -22,17 +21,16 @@ th, td {
     max-width: 100px !important; 
     box-sizing: border-box; 
     overflow: hidden; 
-    text-overflow: ellipsis; 
 }
 
-/* ★ 左端の項目名列だけは広い幅を維持 */
+/* 1列目：項目名（170px幅で固定） */
 .sticky-col-item { 
-    position: sticky; 
-    left: 0; 
-    background-color: #f2f2f2; 
+    position: sticky !important; 
+    left: 0 !important; 
+    background-color: #f2f2f2 !important; 
     font-weight: bold; 
-    z-index: 100; 
-    border-right: 2px solid #444; 
+    z-index: 110 !important; 
+    border-right: 2px solid #444 !important; 
     width: 170px !important; 
     min-width: 170px !important; 
     max-width: 170px !important; 
@@ -40,21 +38,22 @@ th, td {
     padding-left: 5px; 
 }
 
-/* ★ 合計列の幅を指定 */
+/* 2列目：合計（105px幅で、1列目のすぐ右「left: 170px」に固定） */
 .sticky-col-total { 
-    position: sticky; 
-    left: 170px; 
-    background-color: #fff9e6; 
+    position: sticky !important; 
+    left: 170px !important; 
+    background-color: #fff9e6 !important; 
     font-weight: bold; 
-    z-index: 90; 
-    border-right: 2px solid #444; 
+    z-index: 100 !important; 
+    border-right: 2px solid #444 !important; 
     width: 105px !important; 
     min-width: 105px !important; 
     max-width: 105px !important; 
 }
 
 .shop-header { background-color: #44546a; color: white; height: 35px; position: sticky; top: 0; z-index: 150; }
-.section-row { background-color: #adb9ca; font-weight: bold; text-align: left; padding: 4px 10px; color: black; font-size: 11px; position: sticky; left: 0; z-index: 180; }
+.section-row { background-color: #adb9ca !important; font-weight: bold; text-align: left; padding: 4px 10px; color: black !important; font-size: 11px; }
+
 .cell-stack { display: flex; flex-direction: column; width: 100%; height: 100%; justify-content: center; text-align: center; }
 .stack-upper { display: flex; width: 100%; border-bottom: 1px dotted #d9d9d9; height: 18px; line-height: 18px; }
 .val-kei { color: #0070c0; width: 50%; border-right: 1px dotted #d9d9d9; font-size: 9px; text-align: center; }
