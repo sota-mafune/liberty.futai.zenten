@@ -1,4 +1,3 @@
-// プログラム部分は元のまま変更なし
 var allData = [];
 var staffStatsMaster = {}, storeStatsMaster = {}, storeGroupMap = {}, staffStoreMap = {};
 var storeToGroup = { "神戸店":"兵四", "久米窪田店":"兵四", "高知高須店":"兵四", "北久米店":"兵四", "尼崎店":"兵四", "高槻店":"大阪", "八尾店":"大阪", "堺大泉緑地前店":"大阪", "松原天美店":"大阪", "貝塚店":"大阪", "大津店":"滋三", "栗東店":"滋三", "彦根店":"滋三", "津店":"滋三", "松阪店":"滋三", "鯖江店":"滋三", "久御山店":"京奈", "171店":"京奈", "精華店":"京奈", "西大和店":"京奈", "橿原店":"京奈", "熊本インター店":"旧Dj", "長田店":"旧Dj", "outlet店":"旧Dj", "舞鶴店":"旧Dj", "福知山店":"旧Dj", "加古川店":"旧Dj", "BYD滋賀":"未所属" };
@@ -49,14 +48,8 @@ function updateSelector(id, set, def) { var sel = document.getElementById(id); s
 
 function buildTable(sum, title, totalS) {
     var keys = Object.keys(sum).sort();
-    
-    // 【修正箇所】見出しセルの position と z-index を指定
-    var h = "<table><thead><tr>";
-    h += "<th class='sticky-col-item shop-header' style='position: sticky !important; z-index: 300 !important; top: 0; left: 0;'>" + (title || "KPI項目") + "</th>";
-    h += "<th class='sticky-col-total shop-header' style='position: sticky !important; z-index: 290 !important; top: 0; left: 170px;'>合計</th>";
-    for(var i=0; i<keys.length; i++) {
-        h += "<th class='shop-header' style='position: sticky !important; z-index: 150; top: 0;'>" + keys[i] + "</th>";
-    }
+    var h = "<table><thead><tr><th class='sticky-col-item shop-header'>" + (title || "KPI項目") + "</th><th class='sticky-col-total shop-header'>合計</th>";
+    for(var i=0; i<keys.length; i++) h += "<th class='shop-header'>" + keys[i] + "</th>";
     h += "</tr></thead><tbody>";
 
     const rowDef = [
@@ -78,16 +71,7 @@ function buildTable(sum, title, totalS) {
 
     for(var j=0; j<rowDef.length; j++){ 
         var r = rowDef[j]; 
-        if(r.sec) {
-            // 【修正箇所】帯も分割して position: sticky を指定
-            h += "<tr>";
-            h += "<td class='sticky-col-item section-row' style='position: sticky !important; z-index: 180 !important; left: 0; border-right: none;'>" + r.sec + "</td>";
-            h += "<td class='sticky-col-total section-row' style='position: sticky !important; z-index: 170 !important; left: 170px; border-left: none;'></td>";
-            if (keys.length > 0) {
-                h += "<td colspan='" + keys.length + "' class='section-row' style='position: static; z-index: 1; border-left: none;'></td>";
-            }
-            h += "</tr>";
-        }
+        if(r.sec) h += "<tr><td colspan='"+(keys.length+2)+"' class='section-row'>"+r.sec+"</td></tr>";
         else {
             h += "<tr><td class='sticky-col-item' style='background-color:"+(r.cls||"#fff")+"'>"+r.lbl+"</td>";
             h += renderCell(totalS, r, true); 
