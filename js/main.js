@@ -48,7 +48,6 @@ function updateSelector(id, set, def) { var sel = document.getElementById(id); s
 
 function buildTable(sum, title, totalS) {
     var keys = Object.keys(sum).sort();
-    
     var h = "<table><thead><tr>";
     h += "<th class='sticky-col-item shop-header' style='position: sticky !important; z-index: 300 !important; top: 0; left: 0;'>" + (title || "KPI項目") + "</th>";
     h += "<th class='sticky-col-total shop-header' style='position: sticky !important; z-index: 290 !important; top: 0; left: 170px;'>合計</th>";
@@ -98,10 +97,7 @@ function buildTable(sum, title, totalS) {
 function renderCell(s, r, isT) {
     var kVal = "-", fVal = "-", tVal = "-", textClass = r.redText ? "force-red" : "";
     var c = isT ? "sticky-col-total " : "";
-    
-    if(r.m === "empty") { 
-        return "<td class='"+c+"'><div class='cell-stack'><div class='stack-upper' style='display:flex;'><div class='val-kei'>-</div><div class='val-fu'>-</div></div><div class='stack-lower'>-</div></div></td>"; 
-    }
+    if(r.m === "empty") { return "<td class='"+c+"'><div class='cell-stack'><div class='stack-upper' style='display:flex;'><div class='val-kei'>-</div><div class='val-fu'>-</div></div><div class='stack-lower'>-</div></div></td>"; }
     else if(r.type && r.type.startsWith("arari")) {
         if(r.type === "arari_val") { kVal = s.j_k; fVal = s.j_f; tVal = kVal + fVal; }
         else if(r.type === "arari_avg") { var kA = s.ar_cnt_k ? Math.round(s[r.val+"_k"]/s.ar_cnt_k) : 0; var fA = s.ar_cnt_f ? Math.round(s[r.val+"_f"]/s.ar_cnt_f) : 0; var tA = (s.ar_cnt_k+s.ar_cnt_f) ? Math.round((s[r.val+"_k"]+s[r.val+"_f"])/(s.ar_cnt_k+s.ar_cnt_f)) : 0; kVal = kA.toLocaleString(); fVal = fA.toLocaleString(); tVal = tA.toLocaleString(); }
