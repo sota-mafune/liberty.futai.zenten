@@ -10,7 +10,7 @@ select { padding: 3px 8px; border-radius: 4px; border: 1px solid #999; font-size
 
 table { border-collapse: separate; border-spacing: 0; width: max-content; background: white; table-layout: fixed !important; }
 
-/* 全セルの共通設定 */
+/* 全体の列幅（データ列）を100pxに固定 */
 th, td { 
     border: 1px solid #d9d9d9; 
     padding: 0; 
@@ -20,11 +20,10 @@ th, td {
     min-width: 100px !important; 
     max-width: 100px !important; 
     box-sizing: border-box; 
-    overflow: hidden;
-    background-color: #ffffff; /* デフォルトは白 */
+    overflow: hidden; 
 }
 
-/* 1列目：項目名固定 */
+/* 1列目：項目名（170px幅で固定） */
 .sticky-col-item { 
     position: sticky !important; 
     left: 0 !important; 
@@ -39,10 +38,12 @@ th, td {
     padding-left: 5px; 
 }
 
-/* 2列目：合計列固定（背景色は行の設定に従うため!importantなし） */
+/* 2列目：合計（105px幅で、1列目のすぐ右「left: 170px」に固定） */
 .sticky-col-total { 
     position: sticky !important; 
     left: 170px !important; 
+    background-color: #fff9e6 !important; 
+    font-weight: bold; 
     z-index: 100 !important; 
     border-right: 2px solid #444 !important; 
     width: 105px !important; 
@@ -50,119 +51,19 @@ th, td {
     max-width: 105px !important; 
 }
 
-/* ヘッダー・帯 */
-.shop-header { background-color: #44546a !important; color: white !important; height: 35px; position: sticky; top: 0; z-index: 150; }
-.section-row { background-color: #adb9ca !important; font-weight: bold; text-align: left; padding: 4px 10px; color: black !important; font-size: 11px; position: sticky; left: 0; z-index: 180; }
+.shop-header { background-color: #44546a; color: white; height: 35px; position: sticky; top: 0; z-index: 150; }
+.section-row { background-color: #adb9ca !important; font-weight: bold; text-align: left; padding: 4px 10px; color: black !important; font-size: 11px; }
 
-/* --- ★定義表に基づいた背景色設定 --- */
-
-/* 黄色 (#ffe599): 実績, 商談率, 成約率 */
-tr:has(td:first-child:contains("実績")):not(:has(td:first-child:contains("昨年"))),
-tr:has(td:first-child:contains("商談率")),
-tr:has(td:first-child:contains("成約率")) {
-    background-color: #ffe599;
-}
-tr:has(td:first-child:contains("実績")):not(:has(td:first-child:contains("昨年"))) td,
-tr:has(td:first-child:contains("商談率")) td,
-tr:has(td:first-child:contains("成約率")) td {
-    background-color: #ffe599 !important;
-}
-
-/* 薄紫 (#d9d2e9): 昨年実績, 昨年対比, 昨年接客数, 昨年成約率 */
-tr:has(td:first-child:contains("昨年")) {
-    background-color: #d9d2e9;
-}
-tr:has(td:first-child:contains("昨年")) td {
-    background-color: #d9d2e9 !important;
-}
-
-/* 薄赤 (#f4cccc): 追客可能数, 決着済, 決着率 */
-tr:has(td:first-child:contains("追客")),
-tr:has(td:first-child:contains("決着")) {
-    background-color: #f4cccc;
-}
-tr:has(td:first-child:contains("追客")) td,
-tr:has(td:first-child:contains("決着")) td {
-    background-color: #f4cccc !important;
-}
-
-/* 薄緑 (#b6d7a8): 新車, 未使用車, 中古車 */
-tr:has(td:first-child:contains("新車")),
-tr:has(td:first-child:contains("未使用")),
-tr:has(td:first-child:contains("中古車")) {
-    background-color: #b6d7a8;
-}
-tr:has(td:first-child:contains("新車")) td,
-tr:has(td:first-child:contains("未使用")) td,
-tr:has(td:first-child:contains("中古車")) td {
-    background-color: #b6d7a8 !important;
-}
-
-/* 付帯品水色 (#a2c4c9): 保証, パック, コーティング, UPグレード, T-プレミアム, 室内コート, 防錆コート, ナビ, 希望ナンバー, フィルム, アクアペル, 下取り, 総付帯 */
-tr:has(td:first-child:contains("保証")),
-tr:has(td:first-child:contains("パック")),
-tr:has(td:first-child:contains("コーティング")),
-tr:has(td:first-child:contains("UPグレード")),
-tr:has(td:first-child:contains("T-プレミアム")),
-tr:has(td:first-child:contains("室内コート")),
-tr:has(td:first-child:contains("防錆コート")),
-tr:has(td:first-child:contains("ナビ")),
-tr:has(td:first-child:contains("希望ナンバー")),
-tr:has(td:first-child:contains("フィルム")),
-tr:has(td:first-child:contains("アクアペル")),
-tr:has(td:first-child:contains("下取り")),
-tr:has(td:first-child:contains("総付帯")) {
-    background-color: #a2c4c9;
-}
-tr:has(td:first-child:contains("保証")) td, tr:has(td:first-child:contains("パック")) td, tr:has(td:first-child:contains("コーティング")) td, 
-tr:has(td:first-child:contains("UPグレード")) td, tr:has(td:first-child:contains("T-プレミアム")) td, tr:has(td:first-child:contains("室内コート")) td, 
-tr:has(td:first-child:contains("防錆コート")) td, tr:has(td:first-child:contains("ナビ")) td, tr:has(td:first-child:contains("希望ナンバー")) td, 
-tr:has(td:first-child:contains("フィルム")) td, tr:has(td:first-child:contains("アクアペル")) td, tr:has(td:first-child:contains("下取り")) td, 
-tr:has(td:first-child:contains("総付帯")) td {
-    background-color: #a2c4c9 !important;
-}
-
-/* ローン薄青 (#a4c2f4): ローン, 84回, 6.90%...残価設定 */
-tr:has(td:first-child:contains("ローン")),
-tr:has(td:first-child:contains("84回")),
-tr:has(td:first-child:contains("%")),
-tr:has(td:first-child:contains("低金利")),
-tr:has(td:first-child:contains("残価設定")) {
-    background-color: #a4c2f4;
-}
-tr:has(td:first-child:contains("ローン")) td, tr:has(td:first-child:contains("84回")) td, tr:has(td:first-child:contains("%")) td, 
-tr:has(td:first-child:contains("低金利")) td, tr:has(td:first-child:contains("残価設定")) td {
-    background-color: #a4c2f4 !important;
-}
-
-/* 受注時想定ピンク (#ead1dc) */
-tr:has(td:first-child:contains("受注台数")),
-tr:has(td:first-child:contains("@")),
-tr:has(td:first-child:contains("総粗利")) {
-    background-color: #ead1dc;
-}
-tr:has(td:first-child:contains("受注台数")) td, tr:has(td:first-child:contains("@")) td, tr:has(td:first-child:contains("総粗利")) td {
-    background-color: #ead1dc !important;
-}
-
-/* 獲得率・達成率などは常に白 (#ffffff) */
-tr td:has(.cell-stack:contains("率")),
-tr td:has(.cell-stack:contains("獲得率")) {
-    background-color: #ffffff !important;
-}
-
-/* 1列目(sticky-col-item)の背景色は常にグレー優先 */
-.sticky-col-item {
-    background-color: #f2f2f2 !important;
-}
-
-/* 数値スタック */
 .cell-stack { display: flex; flex-direction: column; width: 100%; height: 100%; justify-content: center; text-align: center; }
 .stack-upper { display: flex; width: 100%; border-bottom: 1px dotted #d9d9d9; height: 18px; line-height: 18px; }
-.val-kei { color: #0070c0; width: 50%; border-right: 1px dotted #d9d9d9; font-size: 9px; text-align: center; font-weight: bold; }
-.val-fu { color: #c00000; width: 50%; font-size: 9px; text-align: center; font-weight: bold; }
-.stack-lower { font-weight: bold; height: 20px; line-height: 20px; color: #000; font-size: 11px; text-align: center; }
-
+.val-kei { color: #0070c0; width: 50%; border-right: 1px dotted #d9d9d9; font-size: 9px; text-align: center; }
+.val-fu { color: #c00000; width: 50%; font-size: 9px; text-align: center; }
+.stack-lower { font-weight: bold; height: 20px; line-height: 20px; color: #000; font-size: 10px; text-align: center; }
+.stack-label-3 { display: flex; width: 100%; border-bottom: 1px dotted #ccc; height: 13px; line-height: 13px; font-size: 8px; color: #333; background: rgba(0,0,0,0.03); }
+.stack-values-3 { display: flex; width: 100%; border-bottom: 1px dotted #ccc; height: 16px; line-height: 16px; }
+.stack-total-3 { font-weight: bold; height: 18px; line-height: 18px; color: #b00; font-size: 10px; text-align: center; }
+.bg-sou-upper { background-color: #ead1dc !important; font-weight: bold; height: 20px; line-height: 20px; font-size: 10px; border-bottom: 1px solid #d9d9d9 !important; text-align: center; display: flex; align-items: center; justify-content: center; }
+.bg-sou-lower { background-color: #ffffff !important; font-weight: normal; height: 18px; line-height: 18px; border-top: 1px solid #d9d9d9; display: flex; justify-content: center; }
 .force-red { color: #ff0000 !important; }
 #loading { padding: 20px; color: #e67e22; font-weight: bold; }
 .page-content { display: none; } .page-content.active { display: block; }
