@@ -48,13 +48,8 @@ function updateSelector(id, set, def) { var sel = document.getElementById(id); s
 
 function buildTable(sum, title, totalS) {
     var keys = Object.keys(sum).sort();
-    
-    var h = "<table><thead><tr>";
-    h += "<th class='sticky-col-item shop-header' style='position: sticky; z-index: 300; top: 0; left: 0;'>" + (title || "KPI項目") + "</th>";
-    h += "<th class='sticky-col-total shop-header' style='position: sticky; z-index: 290; top: 0; left: 170px;'>合計</th>";
-    for(var i=0; i<keys.length; i++) {
-        h += "<th class='shop-header' style='position: sticky; z-index: 150; top: 0;'>" + keys[i] + "</th>";
-    }
+    var h = "<table><thead><tr><th class='sticky-col-item shop-header'>" + (title || "KPI項目") + "</th><th class='sticky-col-total shop-header'>合計</th>";
+    for(var i=0; i<keys.length; i++) h += "<th class='shop-header'>" + keys[i] + "</th>";
     h += "</tr></thead><tbody>";
 
     const rowDef = [
@@ -76,15 +71,7 @@ function buildTable(sum, title, totalS) {
 
     for(var j=0; j<rowDef.length; j++){ 
         var r = rowDef[j]; 
-        if(r.sec) {
-            h += "<tr>";
-            h += "<td class='sticky-col-item section-row' style='position: sticky; z-index: 180; left: 0; border-right: none;'>" + r.sec + "</td>";
-            h += "<td class='sticky-col-total section-row' style='position: sticky; z-index: 170; left: 170px; border-left: none;'></td>";
-            if (keys.length > 0) {
-                h += "<td colspan='" + keys.length + "' class='section-row' style='position: static; z-index: 1; border-left: none;'></td>";
-            }
-            h += "</tr>";
-        }
+        if(r.sec) h += "<tr><td colspan='"+(keys.length+2)+"' class='section-row'>"+r.sec+"</td></tr>";
         else {
             h += "<tr><td class='sticky-col-item' style='background-color:"+(r.cls||"#fff")+"'>"+r.lbl+"</td>";
             h += renderCell(totalS, r, true); 
@@ -120,18 +107,6 @@ function renderCell(s, r, isT) {
     }
 }
 
-function showPage(id) { 
-    document.querySelectorAll('.page-content').forEach(function(p){ p.classList.remove('active'); }); 
-    document.getElementById(id).classList.add('active'); 
-    
-    document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); });
-    var btnId = 'btn-' + id.replace('-page', '');
-    var btn = document.getElementById(btnId);
-    if(btn) btn.classList.add('active');
-
-    document.getElementById('group-filter-area').style.display = (id === 'store-page') ? 'flex' : 'none'; 
-    document.getElementById('staff-filter-area').style.display = (id === 'staff-page') ? 'flex' : 'none'; 
-}
-
+function showPage(id) { document.querySelectorAll('.page-content').forEach(function(p){ p.classList.remove('active'); }); document.getElementById(id).classList.add('active'); document.getElementById('group-filter-area').style.display = (id === 'store-page') ? 'flex' : 'none'; document.getElementById('staff-filter-area').style.display = (id === 'staff-page') ? 'flex' : 'none'; }
 function filterStoreByGroup() { var g = document.getElementById('group-selector').value, f = {}, t = createStats(); Object.keys(storeStatsMaster).forEach(function(st){ if (g === "all" || storeGroupMap[st] === g) { f[st] = storeStatsMaster[st]; Object.keys(t).forEach(function(k){ if(typeof t[k] === 'number') t[k] += storeStatsMaster[st][k]; }); } }); document.getElementById("store-table-container").innerHTML = buildTable(f, "店舗名", t); }
 function filterStaffByStore() { var s = document.getElementById('store-selector').value, f = {}, t = createStats(); Object.keys(staffStatsMaster).forEach(function(n){ if (s === "all" || staffStoreMap[n] === s) { f[n] = staffStatsMaster[n]; Object.keys(t).forEach(function(k){ if(typeof t[k] === 'number') t[k] += staffStatsMaster[n][k]; }); } }); document.getElementById("staff-table-container").innerHTML = buildTable(f, "担当者名", t); }
