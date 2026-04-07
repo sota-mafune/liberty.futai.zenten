@@ -1,4 +1,3 @@
-// プログラム部分は元のまま変更なし
 var allData = [];
 var staffStatsMaster = {}, storeStatsMaster = {}, storeGroupMap = {}, staffStoreMap = {};
 var storeToGroup = { "神戸店":"兵四", "久米窪田店":"兵四", "高知高須店":"兵四", "北久米店":"兵四", "尼崎店":"兵四", "高槻店":"大阪", "八尾店":"大阪", "堺大泉緑地前店":"大阪", "松原天美店":"大阪", "貝塚店":"大阪", "大津店":"滋三", "栗東店":"滋三", "彦根店":"滋三", "津店":"滋三", "松阪店":"滋三", "鯖江店":"滋三", "久御山店":"京奈", "171店":"京奈", "精華店":"京奈", "西大和店":"京奈", "橿原店":"京奈", "熊本インター店":"旧Dj", "長田店":"旧Dj", "outlet店":"旧Dj", "舞鶴店":"旧Dj", "福知山店":"旧Dj", "加古川店":"旧Dj", "BYD滋賀":"未所属" };
@@ -97,9 +96,12 @@ function buildTable(sum, title, totalS) {
 }
 
 function renderCell(s, r, isT) {
-    var kVal = "-", fVal = "-", tVal = "-", bg = r.cls || "#ffffff", textClass = r.redText ? "force-red" : "";
+    var kVal = "-", fVal = "-", tVal = "-", textClass = r.redText ? "force-red" : "";
     var c = isT ? "sticky-col-total " : "";
-    if(r.m === "empty") { return "<td class='"+c+"' style='background-color:"+bg+"'><div class='cell-stack'><div class='stack-upper' style='display:flex;'><div class='val-kei'>-</div><div class='val-fu'>-</div></div><div class='stack-lower'>-</div></div></td>"; }
+    
+    if(r.m === "empty") { 
+        return "<td class='"+c+"'><div class='cell-stack'><div class='stack-upper' style='display:flex;'><div class='val-kei'>-</div><div class='val-fu'>-</div></div><div class='stack-lower'>-</div></div></td>"; 
+    }
     else if(r.type && r.type.startsWith("arari")) {
         if(r.type === "arari_val") { kVal = s.j_k; fVal = s.j_f; tVal = kVal + fVal; }
         else if(r.type === "arari_avg") { var kA = s.ar_cnt_k ? Math.round(s[r.val+"_k"]/s.ar_cnt_k) : 0; var fA = s.ar_cnt_f ? Math.round(s[r.val+"_f"]/s.ar_cnt_f) : 0; var tA = (s.ar_cnt_k+s.ar_cnt_f) ? Math.round((s[r.val+"_k"]+s[r.val+"_f"])/(s.ar_cnt_k+s.ar_cnt_f)) : 0; kVal = kA.toLocaleString(); fVal = fA.toLocaleString(); tVal = tA.toLocaleString(); }
@@ -108,7 +110,7 @@ function renderCell(s, r, isT) {
     }
     else if(r.lbl === "実績" && !r.type) {
         kVal = s.j_k; fVal = s.j_f; tVal = kVal + fVal;
-        return "<td class='"+c+"' style='background-color:"+bg+"'><div class='cell-stack'><div class='stack-label-3'><div style='width:50%;border-right:1px dotted #ccc;'>軽</div><div style='width:50%;'>普</div></div><div class='stack-values-3'><div class='val-kei'>"+kVal+"</div><div class='val-fu'>"+fVal+"</div></div><div class='stack-total-3'>"+tVal+"</div></div></td>";
+        return "<td class='"+c+"'><div class='cell-stack'><div class='stack-label-3'><div style='width:50%;border-right:1px dotted #ccc;'>軽</div><div style='width:50%;'>普</div></div><div class='stack-values-3'><div class='val-kei'>"+kVal+"</div><div class='val-fu'>"+fVal+"</div></div><div class='stack-total-3'>"+tVal+"</div></div></td>";
     }
     else {
         if(r.type === "ratio") { var nk_k = s[r.n+"_k"], dk_k = s[r.d+"_k"], nk_f = s[r.n+"_f"], dk_f = s[r.d+"_f"]; kVal = dk_k ? Math.round(nk_k/dk_k*100)+"%" : "0%"; fVal = dk_f ? Math.round(nk_f/dk_f*100)+"%" : "0%"; tVal = (dk_k+dk_f) ? Math.round((nk_k+nk_f)/(dk_k+dk_f)*100)+"%" : "0%"; }
@@ -117,34 +119,20 @@ function renderCell(s, r, isT) {
         else if(r.type === "sum") { tVal = 0; r.items.forEach(function(i){ tVal += (s[i+"_k"]+s[i+"_f"]); }); }
         else if(r.type === "sum_ratio") { var tk_k=0, tf_f=0; r.items.forEach(function(i){ tk_k += s[i+"_k"]; tf_f += s[i+"_f"]; }); kVal = s[r.d+"_k"] ? Math.round(tk_k/s[r.d+"_k"]*100)+"%" : "0%"; fVal = s[r.d+"_f"] ? Math.round(tf_f/s[r.d+"_f"]*100)+"%" : "0%"; tVal = (s[r.d+"_k"]+s[r.d+"_f"]) ? Math.round((tk_k+tf_f)/(s[r.d+"_k"]+s[r.d+"_f"])*100)+"%" : "0%"; }
         else { kVal = s[r.m+"_k"]; fVal = s[r.m+"_f"]; tVal = kVal + fVal; }
-        return "<td class='"+c+"' style='background-color:"+bg+"'><div class='cell-stack "+textClass+"'><div class='stack-upper' style='display:flex;'><div class='val-kei'>"+kVal+"</div><div class='val-fu'>"+fVal+"</div></div><div class='stack-lower'>"+tVal+"</div></div></td>";
+        return "<td class='"+c+"'><div class='cell-stack "+textClass+"'><div class='stack-upper' style='display:flex;'><div class='val-kei'>"+kVal+"</div><div class='val-fu'>"+fVal+"</div></div><div class='stack-lower'>"+tVal+"</div></div></td>";
     }
 }
+
 function showPage(id) { 
-    // 1. 下の表（コンテンツ）を切り替える
-    document.querySelectorAll('.page-content').forEach(function(p){ 
-        p.classList.remove('active'); 
-    }); 
+    document.querySelectorAll('.page-content').forEach(function(p){ p.classList.remove('active'); }); 
     document.getElementById(id).classList.add('active'); 
-
-    // 2. ★ボタンの色を切り替える（ここが重要！）
-    document.querySelectorAll('.tab-btn').forEach(function(b){ 
-        b.classList.remove('active'); 
-    });
-    
-    // 仕組み：id ('group-page') から '-page' を消して 'btn-' をつける
-    // 結果：'btn-group' というIDのボタンを探して active にする
-    var baseName = id.replace('-page', '');
-    var targetBtnId = 'btn-' + baseName;
-    var targetBtn = document.getElementById(targetBtnId);
-    
-    if (targetBtn) {
-        targetBtn.classList.add('active');
-    }
-
-    // 3. フィルターエリアの表示/非表示を切り替える
+    document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); });
+    var btnId = 'btn-' + id.replace('-page', '');
+    var btn = document.getElementById(btnId);
+    if(btn) btn.classList.add('active');
     document.getElementById('group-filter-area').style.display = (id === 'store-page') ? 'flex' : 'none'; 
     document.getElementById('staff-filter-area').style.display = (id === 'staff-page') ? 'flex' : 'none'; 
 }
+
 function filterStoreByGroup() { var g = document.getElementById('group-selector').value, f = {}, t = createStats(); Object.keys(storeStatsMaster).forEach(function(st){ if (g === "all" || storeGroupMap[st] === g) { f[st] = storeStatsMaster[st]; Object.keys(t).forEach(function(k){ if(typeof t[k] === 'number') t[k] += storeStatsMaster[st][k]; }); } }); document.getElementById("store-table-container").innerHTML = buildTable(f, "店舗名", t); }
 function filterStaffByStore() { var s = document.getElementById('store-selector').value, f = {}, t = createStats(); Object.keys(staffStatsMaster).forEach(function(n){ if (s === "all" || staffStoreMap[n] === s) { f[n] = staffStatsMaster[n]; Object.keys(t).forEach(function(k){ if(typeof t[k] === 'number') t[k] += staffStatsMaster[n][k]; }); } }); document.getElementById("staff-table-container").innerHTML = buildTable(f, "担当者名", t); }
