@@ -21,13 +21,14 @@ th, td {
     max-width: 100px !important; 
     box-sizing: border-box; 
     overflow: hidden; 
+    background-color: #fff; /* 基本は白 */
 }
 
-/* ★1列目：項目名（前のグレー #f2f2f2 を復元） */
+/* ★1列目：項目名（グレーを強制） */
 .sticky-col-item { 
     position: sticky !important; 
     left: 0 !important; 
-    background-color: #f2f2f2 !important; 
+    background-color: #f2f2f2 !important; /* ←ここが重要 */
     font-weight: bold; 
     z-index: 110 !important; 
     border-right: 2px solid #444 !important; 
@@ -38,11 +39,11 @@ th, td {
     padding-left: 5px; 
 }
 
-/* ★2列目：合計（前の薄い黄色 #fff9e6 を復元） */
+/* ★2列目：合計（薄い黄色を強制） */
 .sticky-col-total { 
     position: sticky !important; 
     left: 170px !important; 
-    background-color: #fff9e6 !important; 
+    background-color: #fff9e6 !important; /* ←ここが重要 */
     font-weight: bold; 
     z-index: 100 !important; 
     border-right: 2px solid #444 !important; 
@@ -51,10 +52,11 @@ th, td {
     max-width: 105px !important; 
 }
 
-/* ヘッダー・帯・その他のカラー設定（!importantで強制適用） */
+/* ヘッダー・帯のカラー（ここも !important で守る） */
 .shop-header { background-color: #44546a !important; color: white !important; height: 35px; position: sticky; top: 0; z-index: 150; }
-.section-row { background-color: #adb9ca !important; font-weight: bold; text-align: left; padding: 4px 10px; color: black !important; font-size: 11px; position: sticky; left: 0; z-index: 180; }
+.section-row { background-color: #adb9ca !important; font-weight: bold; text-align: left; padding: 4px 10px; color: black !important; font-size: 11px; }
 
+/* 各種スタックの見た目 */
 .cell-stack { display: flex; flex-direction: column; width: 100%; height: 100%; justify-content: center; text-align: center; }
 .stack-upper { display: flex; width: 100%; border-bottom: 1px dotted #d9d9d9; height: 18px; line-height: 18px; }
 .val-kei { color: #0070c0; width: 50%; border-right: 1px dotted #d9d9d9; font-size: 9px; text-align: center; }
@@ -63,8 +65,11 @@ th, td {
 .stack-label-3 { display: flex; width: 100%; border-bottom: 1px dotted #ccc; height: 13px; line-height: 13px; font-size: 8px; color: #333; background: rgba(0,0,0,0.03); }
 .stack-values-3 { display: flex; width: 100%; border-bottom: 1px dotted #ccc; height: 16px; line-height: 16px; }
 .stack-total-3 { font-weight: bold; height: 18px; line-height: 18px; color: #b00; font-size: 10px; text-align: center; }
-.bg-sou-upper { background-color: #ead1dc !important; font-weight: bold; height: 20px; line-height: 20px; font-size: 10px; border-bottom: 1px solid #d9d9d9 !important; text-align: center; display: flex; align-items: center; justify-content: center; }
-.bg-sou-lower { background-color: #ffffff !important; font-weight: normal; height: 18px; line-height: 18px; border-top: 1px solid #d9d9d9; display: flex; justify-content: center; }
+
+/* 受注時想定のカラー */
+.bg-sou-upper { background-color: #ead1dc !important; font-weight: bold; height: 20px; line-height: 20px; font-size: 10px; border-bottom: 1px solid #d9d9d9 !important; }
+.bg-sou-lower { background-color: #ffffff !important; height: 18px; line-height: 18px; }
+
 .force-red { color: #ff0000 !important; }
 #loading { padding: 20px; color: #e67e22; font-weight: bold; }
 .page-content { display: none; } .page-content.active { display: block; }
