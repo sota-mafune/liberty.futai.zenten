@@ -1,16 +1,14 @@
+@charset "UTF-8";
 body { font-family: "Meiryo", sans-serif; font-size: 10px; margin: 0; background-color: #f4f7f6; color: #333; overflow: hidden; }
 .tab-menu-container { position: sticky; top: 0; z-index: 2000; background: #fff; padding: 10px; border-bottom: 2px solid #ccc; display: flex; align-items: center; justify-content: space-between; }
 .tab-btn-group { display: flex; gap: 5px; }
 .tab-btn { padding: 6px 15px; cursor: pointer; border: 1px solid #ccc; background: #eee; font-weight: bold; border-radius: 4px; font-size: 11px; }
 .tab-btn.active { background: #2c3e50; color: white; border-color: #2c3e50; }
-.filter-group { display: flex; align-items: center; gap: 10px; font-weight: bold; font-size: 11px; }
-.date-input { padding: 2px 5px; border-radius: 4px; border: 1px solid #999; font-size: 11px; }
-select { padding: 3px 8px; border-radius: 4px; border: 1px solid #999; font-size: 11px; }
+
 .table-wrapper { overflow: auto; height: calc(100vh - 65px); width: 100vw; }
+table { border-collapse: separate; border-spacing: 0; width: max-content; table-layout: fixed !important; }
 
-table { border-collapse: separate; border-spacing: 0; width: max-content; background: white; table-layout: fixed !important; }
-
-/* 全体の列幅（データ列）を100pxに固定 */
+/* 全セルの共通設定：高さを50pxに固定して3段を収める */
 th, td { 
     border: 1px solid #d9d9d9; 
     padding: 0; 
@@ -18,52 +16,69 @@ th, td {
     white-space: nowrap; 
     width: 100px !important; 
     min-width: 100px !important; 
-    max-width: 100px !important; 
+    height: 50px !important; /* セルの高さを固定 */
     box-sizing: border-box; 
     overflow: hidden; 
 }
 
-/* 1列目：項目名（170px幅で固定） */
+/* 固定列 */
 .sticky-col-item { 
-    position: sticky !important; 
-    left: 0 !important; 
+    position: sticky !important; left: 0 !important; 
     background-color: #f2f2f2 !important; 
-    font-weight: bold; 
-    z-index: 110 !important; 
+    font-weight: bold; z-index: 110 !important; 
     border-right: 2px solid #444 !important; 
-    width: 170px !important; 
-    min-width: 170px !important; 
-    max-width: 170px !important; 
-    text-align: left; 
-    padding-left: 5px; 
+    width: 170px !important; min-width: 170px !important; 
+    text-align: left; padding-left: 5px; 
 }
-
-/* 2列目：合計（105px幅で、1列目のすぐ右「left: 170px」に固定） */
 .sticky-col-total { 
-    position: sticky !important; 
-    left: 170px !important; 
-    background-color: #fff9e6 !important; 
-    font-weight: bold; 
-    z-index: 100 !important; 
-    border-right: 2px solid #444 !important; 
-    width: 105px !important; 
-    min-width: 105px !important; 
-    max-width: 105px !important; 
+    position: sticky !important; left: 170px !important; 
+    z-index: 100 !important; border-right: 2px solid #444 !important; 
+    width: 105px !important; min-width: 105px !important; 
 }
 
-.shop-header { background-color: #44546a; color: white; height: 35px; position: sticky; top: 0; z-index: 150; }
-.section-row { background-color: #adb9ca !important; font-weight: bold; text-align: left; padding: 4px 10px; color: black !important; font-size: 11px; }
+/* 3段構成（スタック）の高さ微調整 */
+.cell-stack { 
+    display: flex; flex-direction: column; 
+    width: 100%; height: 100%; 
+    justify-content: center; 
+}
+/* 1段目（ラベル：軽/普）*/
+.stack-label-3 { 
+    display: flex; width: 100%; height: 14px; line-height: 14px; 
+    font-size: 8px; background: rgba(0,0,0,0.05); border-bottom: 1px dotted #ccc;
+}
+/* 2段目（内訳数値）*/
+.stack-values-3 { 
+    display: flex; width: 100%; height: 16px; line-height: 16px; 
+    border-bottom: 1px dotted #ccc;
+}
+/* 3段目（合計数値）*/
+.stack-total-3 { 
+    height: 20px; line-height: 20px; 
+    font-weight: bold; font-size: 11px; color: #000; 
+}
 
-.cell-stack { display: flex; flex-direction: column; width: 100%; height: 100%; justify-content: center; text-align: center; }
-.stack-upper { display: flex; width: 100%; border-bottom: 1px dotted #d9d9d9; height: 18px; line-height: 18px; }
-.val-kei { color: #0070c0; width: 50%; border-right: 1px dotted #d9d9d9; font-size: 9px; text-align: center; }
-.val-fu { color: #c00000; width: 50%; font-size: 9px; text-align: center; }
-.stack-lower { font-weight: bold; height: 20px; line-height: 20px; color: #000; font-size: 10px; text-align: center; }
-.stack-label-3 { display: flex; width: 100%; border-bottom: 1px dotted #ccc; height: 13px; line-height: 13px; font-size: 8px; color: #333; background: rgba(0,0,0,0.03); }
-.stack-values-3 { display: flex; width: 100%; border-bottom: 1px dotted #ccc; height: 16px; line-height: 16px; }
-.stack-total-3 { font-weight: bold; height: 18px; line-height: 18px; color: #b00; font-size: 10px; text-align: center; }
-.bg-sou-upper { background-color: #ead1dc !important; font-weight: bold; height: 20px; line-height: 20px; font-size: 10px; border-bottom: 1px solid #d9d9d9 !important; text-align: center; display: flex; align-items: center; justify-content: center; }
-.bg-sou-lower { background-color: #ffffff !important; font-weight: normal; height: 18px; line-height: 18px; border-top: 1px solid #d9d9d9; display: flex; justify-content: center; }
+/* 通常の2段構成（実績以外）用 */
+.stack-upper { display: flex; width: 100%; height: 18px; line-height: 18px; border-bottom: 1px dotted #d9d9d9; }
+.stack-lower { height: 26px; line-height: 26px; font-weight: bold; font-size: 11px; }
+
+.val-kei { color: #0070c0; width: 50%; border-right: 1px dotted #d9d9d9; font-size: 9px; text-align: center; font-weight: bold; }
+.val-fu { color: #c00000; width: 50%; font-size: 9px; text-align: center; font-weight: bold; }
+
+/* ヘッダー・帯 */
+.shop-header { background-color: #44546a !important; color: white !important; height: 35px; position: sticky; top: 0; z-index: 150; }
+.section-row { background-color: #adb9ca !important; font-weight: bold; text-align: left; padding: 4px 10px; color: black !important; font-size: 11px; position: sticky; left: 0; z-index: 180; height: 30px !important; }
+
+/* 配色（前回の設定を維持） */
+tr:has(td:first-child:contains("実績")):not(:has(td:first-child:contains("昨年"))) td { background-color: #ffe599 !important; }
+tr:has(td:first-child:contains("商談率")) td, tr:has(td:first-child:contains("成約率")) td { background-color: #ffe599 !important; }
+tr:has(td:first-child:contains("昨年")) td { background-color: #d9d2e9 !important; }
+tr:has(td:first-child:contains("追客")) td, tr:has(td:first-child:contains("決着")) td { background-color: #f4cccc !important; }
+tr:has(td:first-child:contains("新車")) td, tr:has(td:first-child:contains("未使用")) td, tr:has(td:first-child:contains("中古車")) td { background-color: #b6d7a8 !important; }
+tr:has(td:first-child:contains("保証")) td, tr:has(td:first-child:contains("パック")) td, tr:has(td:first-child:contains("コーティング")) td, tr:has(td:first-child:contains("UP")) td, tr:has(td:first-child:contains("プレミアム")) td, tr:has(td:first-child:contains("コート")) td, tr:has(td:first-child:contains("ナビ")) td, tr:has(td:first-child:contains("ナンバー")) td, tr:has(td:first-child:contains("フィルム")) td, tr:has(td:first-child:contains("アクア")) td, tr:has(td:first-child:contains("下取り")) td, tr:has(td:first-child:contains("総付帯")) td { background-color: #a2c4c9 !important; }
+tr:has(td:first-child:contains("ローン")) td, tr:has(td:first-child:contains("84回")) td, tr:has(td:first-child:contains("%")) td, tr:has(td:first-child:contains("低金利")) td, tr:has(td:first-child:contains("残価設定")) td { background-color: #a4c2f4 !important; }
+tr:has(td:first-child:contains("受注台数")) td, tr:has(td:first-child:contains("@")) td, tr:has(td:first-child:contains("総粗利")) td { background-color: #ead1dc !important; }
+
+tr td:has(div:contains("率")), tr td:has(div:contains("獲得率")), tr td:has(div:contains("達成率")) { background-color: #ffffff !important; }
+.sticky-col-item { background-color: #f2f2f2 !important; }
 .force-red { color: #ff0000 !important; }
-#loading { padding: 20px; color: #e67e22; font-weight: bold; }
-.page-content { display: none; } .page-content.active { display: block; }
