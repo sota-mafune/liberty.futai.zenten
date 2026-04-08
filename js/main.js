@@ -27,10 +27,19 @@ async function fetchByCOQL() {
     while(hasMore) {
         const offset = (page - 1) * 200;
         const coql = { "select_query": "select ClosingDay, VisitedDateTime, SyaryouCategory, FOrR, Seated, Option1, ServiceStore, ServicePerson, cancel, HanbaiCategory, Option2, Option3, Option15, Option4, Option5, Option16, Option7, Option8, Option9, Option10, Option6, BackCamera, Option17, TradeinCar, PaymentCategory, arari16, arari17, Option14, arari21, arari22, arari23, arari24, arari25 from Services where ((ClosingDay between '" + start + "' and '" + end + "') or (VisitedDateTime between '" + start + "T00:00:00+09:00' and '" + end + "T23:59:59+09:00')) limit " + offset + ", 200" };
-        try { const res = await ZOHO.CRM.API.coql(coql); if (res.data) { allData = allData.concat(res.data); if (res.info && res.info.more_records) page++; else hasMore = false; } else hasMore = false; } catch (e) { hasMore = false; }
+        
+        try { 
+            const res = await ZOHO.CRM.API.coql(coql); 
+            if (res.data) { 
+                allData = allData.concat(res.data); 
+                if (res.info && res.info.more_records) page++; else hasMore = false; 
+            } else hasMore = false; 
+        } catch (e) { hasMore = false; }
     } 
-    // 担当者名をMastersから取得
+
+    // ★ 担当者名(ID)をMastersモジュールから名前に変換する処理を待つ
     await resolveMastersNames();
+    
     renderAll();
 }
 
@@ -39,7 +48,8 @@ async function resolveMastersNames() {
     var ids = [...new Set(allData.map(r => r.ServicePerson ? r.ServicePerson.id : null).filter(id => id))];
     if (ids.length === 0) return;
 
-    loadingEl.innerHTML = "担当者名(" + ids.length + "名)をマスターから照合中...";
+    loadingEl.innerHTML = "担当者名(" + ids.length + "名)を照合中...";
+
     await Promise.all(ids.map(async (id) => {
         if (!personMap[id]) {
             try {
@@ -63,6 +73,7 @@ function aggregate(s, rec) {
 
 function renderAll() {
     var gS = {}, totalS = createStats(); staffStatsMaster = {}; storeStatsMaster = {}; var groupSet = new Set(), storeSet = new Set();
+    
     allData.forEach(r => {
         var st = r.ServiceStore || "未所属", gr = storeToGroup[st] || "未所属";
         var pr = "未設定";
@@ -73,10 +84,10 @@ function renderAll() {
         [gS[gr], storeStatsMaster[st], staffStatsMaster[pr], totalS].forEach(s => aggregate(s, r));
     });
 
+    document.getElementById('loading').style.display = 'none';
     updateSelector('group-selector', groupSet, '全グループ表示'); updateSelector('store-selector', storeSet, '全店舗表示');
     document.getElementById("group-table-container").innerHTML = buildTable(gS, "グループ名", totalS);
     filterStoreByGroup(); filterStaffByStore();
-    document.getElementById('loading').style.display = 'none';
 }
 
 function updateSelector(id, set, def) { var sel = document.getElementById(id); sel.innerHTML = '<option value="all">' + def + '</option>'; Array.from(set).sort().forEach(v => { var o = document.createElement('option'); o.value = o.text = v; sel.add(o); }); }
@@ -89,36 +100,42 @@ function buildTable(sum, title, totalS) {
     for(var i=0; i<keys.length; i++) { h += "<th class='shop-header' style='position: sticky !important; z-index: 150 !important; top: 0;'>" + keys[i] + "</th>"; }
     h += "</tr></thead><tbody>";
 
-    // ★ CSSクラス（bg-xxx）で色を指定するように整理しました
+    // ★ お気に入りの「色指定（cls: '#...'）」に完全に戻しました！
     const rowDef = [
-        { sec: "予算・目標" }, { lbl: "予算", m: "empty", cls: "bg-white" }, { lbl: "目標", m: "empty", cls: "bg-white" }, { lbl: "昨年実績", m: "empty", cls: "bg-white" }, { lbl: "現時点予算", m: "empty", cls: "bg-white" },
-        { sec: "基本実績" }, { lbl: "実績", m: "j", cls: "bg-yellow" }, { lbl: "達成率", type: "ratio", n: "j", d: "g_sls", cls: "bg-white" }, { lbl: "昨年実績(当日)", m: "empty", cls: "bg-purple" }, { lbl: "昨年対比", m: "empty", cls: "bg-purple" },
-        { lbl: "新規接客数", m: "v_n", cls: "bg-white" }, { lbl: "昨年接客数(当日)", m: "empty", cls: "bg-purple" }, { lbl: "商談件数", m: "sho", cls: "bg-white" }, { lbl: "商談率", type: "ratio", n: "sho", d: "v_n", cls: "bg-yellow" },
-        { lbl: "AB数", m: "ab", cls: "bg-white" }, { lbl: "AB率", type: "ratio", n: "ab", d: "sho", cls: "bg-white" }, { lbl: "即決成約", m: "jk", cls: "bg-white" }, { lbl: "即決率", type: "ratio", n: "jk", d: "v_n", cls: "bg-white" },
-        { lbl: "成約率", type: "ratio", n: "j", d: "v_n", cls: "bg-yellow", redText: true }, { lbl: "昨年成約率", m: "empty", cls: "bg-purple" },
-        { lbl: "再来接客数", m: "rv", cls: "bg-white" }, { lbl: "再来店率", type: "custom_ratio", n: "rv", d_sub: ["v_n", "jk"], cls: "bg-white" },
-        { lbl: "再来成約", m: "rj", cls: "bg-white" }, { lbl: "再来成約率", type: "custom_ratio", n: "rj", d_sub: ["v_n", "jk"], cls: "bg-white" },
-        { lbl: "総接客数", m: "tot_v", cls: "bg-white" }, { lbl: "総成約率", type: "ratio", n: "j", d: "tot_v", cls: "bg-white" },
-        { lbl: "追客可能数", type: "diff", n: "v_n", d: "j", cls: "bg-red-light" }, { lbl: "決着済", m: "empty", cls: "bg-red-light" }, { lbl: "決着率", m: "empty", cls: "bg-red-light" },
-        { sec: "販売区分" }, { lbl: "新車", m: "n", cls: "bg-green" }, { lbl: "獲得率", type: "ratio", n: "n", d: "j", cls: "bg-white" }, { lbl: "未使用車", m: "m", cls: "bg-green" }, { lbl: "獲得率", type: "ratio", n: "m", d: "j", cls: "bg-white" }, { lbl: "中古車", m: "c", cls: "bg-green" }, { lbl: "獲得率", type: "ratio", n: "c", d: "j", cls: "bg-white" },
-        { sec: "付帯品個別" }, { lbl: "10年保証", m: "o2", cls: "bg-cyan" }, { lbl: "獲得率", type: "ratio", n: "o2", d: "j", cls: "bg-white" }, { lbl: "中古保証", m: "o3", cls: "bg-cyan" }, { lbl: "獲得率", type: "ratio", n: "o3", d: "j", cls: "bg-white" }, { lbl: "パック", m: "pk", cls: "bg-cyan" }, { lbl: "獲得率", type: "ratio", n: "pk", d: "j", cls: "bg-white" }, { lbl: "コーティング", m: "ct", cls: "bg-cyan" }, { lbl: "獲得率", type: "ratio", n: "ct", d: "j", cls: "bg-white" }, { lbl: "UPグレード", m: "up", cls: "bg-cyan" }, { lbl: "獲得率", type: "ratio", n: "up", d: "j", cls: "bg-white" }, { lbl: "T-プレミアム", m: "tp", cls: "bg-cyan" }, { lbl: "獲得率", type: "ratio", n: "tp", d: "j", cls: "bg-white" }, { lbl: "室内コート", m: "ic", cls: "bg-cyan" }, { lbl: "獲得率", type: "ratio", n: "ic", d: "j", cls: "bg-white" }, { lbl: "防錆コート", m: "rst", cls: "bg-cyan" }, { lbl: "獲得率", type: "ratio", n: "rst", d: "j", cls: "bg-white" }, { lbl: "ナビ取付", m: "ni", cls: "bg-cyan" }, { lbl: "獲得率", type: "ratio", n: "ni", d: "j", cls: "bg-white" }, { lbl: "ナビアップ", m: "nu", cls: "bg-cyan" }, { lbl: "獲得率", type: "ratio", n: "nu", d: "j", cls: "bg-white" }, { lbl: "希望ナンバー", m: "hp", cls: "bg-cyan" }, { lbl: "獲得率", type: "ratio", n: "hp", d: "j", cls: "bg-white" }, { lbl: "フィルム", m: "fl", cls: "bg-cyan" }, { lbl: "獲得率", type: "ratio", n: "fl", d: "j", cls: "bg-white" }, { lbl: "アクアペル", m: "aq", cls: "bg-cyan" }, { lbl: "獲得率", type: "ratio", n: "aq", d: "j", cls: "bg-white" }, { lbl: "下取り", m: "tr", cls: "bg-cyan" }, { lbl: "獲得率", type: "ratio", n: "tr", d: "j", cls: "bg-white" },
-        { sec: "総付帯実績" }, { lbl: "車両総付帯", type: "sum", items: ["ct","up","tp","ic","rst","nu","fl","aq"], cls: "bg-cyan" }, { lbl: "獲得率", type: "sum_ratio", items: ["ct","up","tp","ic","rst","nu","fl","aq"], d: "j", cls: "bg-white" }, { lbl: "周辺総付帯", type: "sum", items: ["n","tr","ln","r69"], cls: "bg-cyan" }, { lbl: "獲得率", type: "sum_ratio", items: ["n","tr","ln","r69"], d: "j", cls: "bg-white" },
-        { sec: "ローン実績" }, { lbl: "ローン", m: "ln", cls: "bg-blue" }, { lbl: "ローン獲得率", type: "ratio", n: "ln", d: "j", cls: "bg-white" }, { lbl: "84回以上", m: "l84", cls: "bg-blue" }, { lbl: "獲得率", type: "ratio", n: "l84", d: "j", cls: "bg-white" }, { lbl: "6.90%", m: "r69", cls: "bg-blue" }, { lbl: "獲得率", type: "ratio", n: "r69", d: "j", cls: "bg-white" }, { lbl: "5.90%", m: "r59", cls: "bg-blue" }, { lbl: "獲得率", type: "ratio", n: "r59", d: "j", cls: "bg-white" }, { lbl: "4.90%", m: "r49", cls: "bg-blue" }, { lbl: "獲得率", type: "ratio", n: "r49", d: "j", cls: "bg-white" }, { lbl: "3.90%", m: "r39", cls: "bg-blue" }, { lbl: "獲得率", type: "ratio", n: "r39", d: "j", cls: "bg-white" }, { lbl: "2.90%", m: "r29", cls: "bg-blue" }, { lbl: "獲得率", type: "ratio", n: "r29", d: "j", cls: "bg-white" }, { lbl: "低金利", m: "low", cls: "bg-blue" }, { lbl: "獲得率", type: "ratio", n: "low", d: "j", cls: "bg-white" }, { lbl: "残価設定", m: "zn", cls: "bg-blue" }, { lbl: "獲得率", type: "ratio", n: "zn", d: "j", cls: "bg-white" },
-        { sec: "受注時想定" }, { lbl: "受注台数", type: "arari_val", val: "j", cls: "bg-pink" }, { lbl: "@車両粗利", type: "arari_avg", val: "ar21", cls: "bg-pink" }, { lbl: "@ローンBK", type: "arari_avg", val: "ar23", cls: "bg-pink" }, { lbl: "@下取粗利", type: "arari_avg", val: "ar22", cls: "bg-pink" }, { lbl: "@全部割(保証抜き)", type: "arari_avg", val: "ar24", cls: "bg-pink" }, { lbl: "@全部割(保証込み)", type: "arari_avg", val: "ar25", cls: "bg-pink" }, { lbl: "総粗利", type: "arari_sum", val: "ar25", cls: "bg-pink" }
+        { sec: "予算・目標" }, { lbl: "予算", m: "empty", cls: "#ffffff" }, { lbl: "目標", m: "empty", cls: "#ffffff" }, { lbl: "昨年実績", m: "empty", cls: "#ffffff" }, { lbl: "現時点予算", m: "empty", cls: "#ffffff" },
+        { sec: "基本実績" }, { lbl: "実績", m: "j", cls: "#ffe599" }, { lbl: "達成率", type: "ratio", n: "j", d: "g_sls", cls: "#ffffff" }, { lbl: "昨年実績(当日)", m: "empty", cls: "#d9d2e9" }, { lbl: "昨年対比", m: "empty", cls: "#d9d2e9" },
+        { lbl: "新規接客数", m: "v_n", cls: "#ffffff" }, { lbl: "昨年接客数(当日)", m: "empty", cls: "#d9d2e9" }, { lbl: "商談件数", m: "sho", cls: "#ffffff" }, { lbl: "商談率", type: "ratio", n: "sho", d: "v_n", cls: "#ffe599" },
+        { lbl: "AB数", m: "ab", cls: "#ffffff" }, { lbl: "AB率", type: "ratio", n: "ab", d: "sho", cls: "#ffffff" }, { lbl: "即決成約", m: "jk", cls: "#ffffff" }, { lbl: "即決率", type: "ratio", n: "jk", d: "v_n", cls: "#ffffff" },
+        { lbl: "成約率", type: "ratio", n: "j", d: "v_n", cls: "#ffe599", redText: true }, { lbl: "昨年成約率", m: "empty", cls: "#d9d2e9" },
+        { lbl: "再来接客数", m: "rv", cls: "#ffffff" }, { lbl: "再来店率", type: "custom_ratio", n: "rv", d_sub: ["v_n", "jk"], cls: "#ffffff" },
+        { lbl: "再来成約", m: "rj", cls: "#ffffff" }, { lbl: "再来成約率", type: "custom_ratio", n: "rj", d_sub: ["v_n", "jk"], cls: "#ffffff" },
+        { lbl: "総接客数", m: "tot_v", cls: "#ffffff" }, { lbl: "総成約率", type: "ratio", n: "j", d: "tot_v", cls: "#ffffff" },
+        { lbl: "追客可能数", type: "diff", n: "v_n", d: "j", cls: "#f4cccc" }, { lbl: "決着済", m: "empty", cls: "#f4cccc" }, { lbl: "決着率", m: "empty", cls: "#f4cccc" },
+        { sec: "販売区分" }, { lbl: "新車", m: "n", cls: "#b6d7a8" }, { lbl: "獲得率", type: "ratio", n: "n", d: "j", cls: "#ffffff" }, { lbl: "未使用車", m: "m", cls: "#b6d7a8" }, { lbl: "獲得率", type: "ratio", n: "m", d: "j", cls: "#ffffff" }, { lbl: "中古車", m: "c", cls: "#b6d7a8" }, { lbl: "獲得率", type: "ratio", n: "c", d: "j", cls: "#ffffff" },
+        { sec: "付帯品個別" }, { lbl: "10年保証", m: "o2", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "o2", d: "j", cls: "#ffffff" }, { lbl: "中古保証", m: "o3", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "o3", d: "j", cls: "#ffffff" }, { lbl: "パック", m: "pk", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "pk", d: "j", cls: "#ffffff" }, { lbl: "コーティング", m: "ct", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "ct", d: "j", cls: "#ffffff" }, { lbl: "UPグレード", m: "up", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "up", d: "j", cls: "#ffffff" }, { lbl: "T-プレミアム", m: "tp", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "tp", d: "j", cls: "#ffffff" }, { lbl: "室内コート", m: "ic", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "ic", d: "j", cls: "#ffffff" }, { lbl: "防錆コート", m: "rst", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "rst", d: "j", cls: "#ffffff" }, { lbl: "ナビ取付", m: "ni", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "ni", d: "j", cls: "#ffffff" }, { lbl: "ナビアップ", m: "nu", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "nu", d: "j", cls: "#ffffff" }, { lbl: "希望ナンバー", m: "hp", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "hp", d: "j", cls: "#ffffff" }, { lbl: "フィルム", m: "fl", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "fl", d: "j", cls: "#ffffff" }, { lbl: "アクアペル", m: "aq", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "aq", d: "j", cls: "#ffffff" }, { lbl: "下取り", m: "tr", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "tr", d: "j", cls: "#ffffff" },
+        { sec: "総付帯実績" }, { lbl: "車両総付帯", type: "sum", items: ["ct","up","tp","ic","rst","nu","fl","aq"], cls: "#a2c4c9" }, { lbl: "獲得率", type: "sum_ratio", items: ["ct","up","tp","ic","rst","nu","fl","aq"], d: "j", cls: "#ffffff" }, { lbl: "周辺総付帯", type: "sum", items: ["n","tr","ln","r69"], cls: "#a2c4c9" }, { lbl: "獲得率", type: "sum_ratio", items: ["n","tr","ln","r69"], d: "j", cls: "#ffffff" },
+        { sec: "ローン実績" }, { lbl: "ローン", m: "ln", cls: "#a4c2f4" }, { lbl: "ローン獲得率", type: "ratio", n: "ln", d: "j", cls: "#ffffff" }, { lbl: "84回以上", m: "l84", cls: "#a4c2f4" }, { lbl: "獲得率", type: "ratio", n: "l84", d: "j", cls: "#ffffff" }, { lbl: "6.90%", m: "r69", cls: "#a4c2f4" }, { lbl: "獲得率", type: "ratio", n: "r69", d: "j", cls: "#ffffff" }, { lbl: "5.90%", m: "r59", cls: "#a4c2f4" }, { lbl: "獲得率", type: "ratio", n: "r59", d: "j", cls: "#ffffff" }, { lbl: "4.90%", m: "r49", cls: "#a4c2f4" }, { lbl: "獲得率", type: "ratio", n: "r49", d: "j", cls: "#ffffff" }, { lbl: "3.90%", m: "r39", cls: "#a4c2f4" }, { lbl: "獲得率", type: "ratio", n: "r39", d: "j", cls: "#ffffff" }, { lbl: "2.90%", m: "r29", cls: "#a4c2f4" }, { lbl: "獲得率", type: "ratio", n: "r29", d: "j", cls: "#ffffff" }, { lbl: "低金利", m: "low", cls: "#a4c2f4" }, { lbl: "獲得率", type: "ratio", n: "low", d: "j", cls: "#ffffff" }, { lbl: "残価設定", m: "zn", cls: "#a4c2f4" }, { lbl: "獲得率", type: "ratio", n: "zn", d: "j", cls: "#ffffff" },
+        { sec: "受注時想定" }, { lbl: "受注台数", type: "arari_val", val: "j", cls: "#ead1dc" }, { lbl: "@車両粗利", type: "arari_avg", val: "ar21", cls: "#ead1dc" }, { lbl: "@ローンBK", type: "arari_avg", val: "ar23", cls: "#ead1dc" }, { lbl: "@下取粗利", type: "arari_avg", val: "ar22", cls: "#ead1dc" }, { lbl: "@全部割(保証抜き)", type: "arari_avg", val: "ar24", cls: "#ead1dc" }, { lbl: "@全部割(保証込み)", type: "arari_avg", val: "ar25", cls: "#ead1dc" }, { lbl: "総粗利", type: "arari_sum", val: "ar25", cls: "#ead1dc" }
     ];
 
     for(var j=0; j<rowDef.length; j++){ 
         var r = rowDef[j]; 
         if(r.sec) {
-            h += "<tr><td class='sticky-col-item section-row' style='position: sticky !important; z-index: 180 !important; left: 0; border-right: none;'>" + r.sec + "</td><td class='sticky-col-total section-row' style='position: sticky !important; z-index: 170 !important; left: 170px; border-left: none;'></td>";
-            if (keys.length > 0) { h += "<td colspan='" + keys.length + "' class='section-row' style='position: static; border-left: none;'></td>"; }
+            h += "<tr>";
+            h += "<td class='sticky-col-item section-row' style='position: sticky !important; z-index: 180 !important; left: 0; border-right: none;'>" + r.sec + "</td>";
+            h += "<td class='sticky-col-total section-row' style='position: sticky !important; z-index: 170 !important; left: 170px; border-left: none;'></td>";
+            if (keys.length > 0) {
+                h += "<td colspan='" + keys.length + "' class='section-row' style='position: static; z-index: 1; border-left: none;'></td>";
+            }
             h += "</tr>";
-        } else {
-            // ★ class="..." に直接 CSSクラス名を流し込む
-            var rowClass = r.cls || "bg-white";
-            h += "<tr><td class='sticky-col-item " + rowClass + "'>" + r.lbl + "</td>";
+        }
+        else {
+            // ★ 背景色をインラインで直接指定するお気に入りの方式
+            h += "<tr><td class='sticky-col-item' style='background-color:"+(r.cls||"#fff")+"'>"+r.lbl+"</td>";
             h += renderCell(totalS, r, true); 
-            for(var k=0; k<keys.length; k++) h += renderCell(sum[keys[k]], r, false);
+            for(var k=0; k<keys.length; k++) {
+                h += renderCell(sum[keys[k]], r, false);
+            }
             h += "</tr>";
         }
     }
@@ -126,20 +143,20 @@ function buildTable(sum, title, totalS) {
 }
 
 function renderCell(s, r, isT) {
-    var kVal = "-", fVal = "-", tVal = "-", textClass = r.redText ? "force-red" : "";
+    var kVal = "-", fVal = "-", tVal = "-", bg = r.cls || "#ffffff", textClass = r.redText ? "force-red" : "";
     var c = isT ? "sticky-col-total " : "";
-    var bgClass = r.cls || "bg-white"; // ★ ここでもCSSのクラス名を指定
     
-    if(r.m === "empty") { return "<td class='" + c + bgClass + "'><div class='cell-stack'><div class='stack-upper' style='display:flex;'><div class='val-kei'>-</div><div class='val-fu'>-</div></div><div class='stack-lower'>-</div></div></td>"; }
+    // ★ ここも背景色を style='background-color:"+bg+"' で直接指定する方式
+    if(r.m === "empty") { return "<td class='"+c+"' style='background-color:"+bg+"'><div class='cell-stack'><div class='stack-upper' style='display:flex;'><div class='val-kei'>-</div><div class='val-fu'>-</div></div><div class='stack-lower'>-</div></div></td>"; }
     else if(r.type && r.type.startsWith("arari")) {
         if(r.type === "arari_val") { kVal = s.j_k; fVal = s.j_f; tVal = kVal + fVal; }
         else if(r.type === "arari_avg") { var kA = s.ar_cnt_k ? Math.round(s[r.val+"_k"]/s.ar_cnt_k) : 0; var fA = s.ar_cnt_f ? Math.round(s[r.val+"_f"]/s.ar_cnt_f) : 0; var tA = (s.ar_cnt_k+s.ar_cnt_f) ? Math.round((s[r.val+"_k"]+s[r.val+"_f"])/(s.ar_cnt_k+s.ar_cnt_f)) : 0; kVal = kA.toLocaleString(); fVal = fA.toLocaleString(); tVal = tA.toLocaleString(); }
         else { kVal = Math.round(s[r.val+"_k"]).toLocaleString(); fVal = Math.round(s[r.val+"_f"]).toLocaleString(); tVal = Math.round(s[r.val+"_k"]+s[r.val+"_f"]).toLocaleString(); }
-        return "<td class='" + c + bgClass + "'><div class='cell-stack'><div class='bg-sou-upper'>"+tVal+"</div><div class='bg-sou-lower'><div class='val-kei'>"+kVal+"</div><div class='val-fu'>"+fVal+"</div></div></div></td>";
+        return "<td class='"+c+"'><div class='cell-stack'><div class='bg-sou-upper'>"+tVal+"</div><div class='bg-sou-lower'><div class='val-kei'>"+kVal+"</div><div class='val-fu'>"+fVal+"</div></div></div></td>";
     }
     else if(r.lbl === "実績" && !r.type) {
         kVal = s.j_k; fVal = s.j_f; tVal = kVal + fVal;
-        return "<td class='" + c + bgClass + "'><div class='cell-stack'><div class='stack-label-3'><div style='width:50%;border-right:1px dotted #ccc;'>軽</div><div style='width:50%;'>普</div></div><div class='stack-values-3'><div class='val-kei'>"+kVal+"</div><div class='val-fu'>"+fVal+"</div></div><div class='stack-total-3'>"+tVal+"</div></div></td>";
+        return "<td class='"+c+"' style='background-color:"+bg+"'><div class='cell-stack'><div class='stack-label-3'><div style='width:50%;border-right:1px dotted #ccc;'>軽</div><div style='width:50%;'>普</div></div><div class='stack-values-3'><div class='val-kei'>"+kVal+"</div><div class='val-fu'>"+fVal+"</div></div><div class='stack-total-3'>"+tVal+"</div></div></td>";
     }
     else {
         if(r.type === "ratio") { var nk_k = s[r.n+"_k"], dk_k = s[r.d+"_k"], nk_f = s[r.n+"_f"], dk_f = s[r.d+"_f"]; kVal = dk_k ? Math.round(nk_k/dk_k*100)+"%" : "0%"; fVal = dk_f ? Math.round(nk_f/dk_f*100)+"%" : "0%"; tVal = (dk_k+dk_f) ? Math.round((nk_k+nk_f)/(dk_k+dk_f)*100)+"%" : "0%"; }
@@ -148,7 +165,7 @@ function renderCell(s, r, isT) {
         else if(r.type === "sum") { tVal = 0; r.items.forEach(function(i){ tVal += (s[i+"_k"]+s[i+"_f"]); }); }
         else if(r.type === "sum_ratio") { var tk_k=0, tf_f=0; r.items.forEach(function(i){ tk_k += s[i+"_k"]; tf_f += s[i+"_f"]; }); kVal = s[r.d+"_k"] ? Math.round(tk_k/s[r.d+"_k"]*100)+"%" : "0%"; fVal = s[r.d+"_f"] ? Math.round(tf_f/s[r.d+"_f"]*100)+"%" : "0%"; tVal = (s[r.d+"_k"]+s[r.d+"_f"]) ? Math.round((tk_k+tf_f)/(s[r.d+"_k"]+s[r.d+"_f"])*100)+"%" : "0%"; }
         else { kVal = s[r.m+"_k"]; fVal = s[r.m+"_f"]; tVal = kVal + fVal; }
-        return "<td class='" + c + bgClass + "'><div class='cell-stack "+textClass+"'><div class='stack-upper' style='display:flex;'><div class='val-kei'>"+kVal+"</div><div class='val-fu'>"+fVal+"</div></div><div class='stack-lower'>"+tVal+"</div></div></td>";
+        return "<td class='"+c+"' style='background-color:"+bg+"'><div class='cell-stack "+textClass+"'><div class='stack-upper' style='display:flex;'><div class='val-kei'>"+kVal+"</div><div class='val-fu'>"+fVal+"</div></div><div class='stack-lower'>"+tVal+"</div></div></td>";
     }
 }
 
