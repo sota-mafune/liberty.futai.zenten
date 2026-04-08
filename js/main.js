@@ -26,6 +26,7 @@ async function fetchByCOQL() {
     let page = 1, hasMore = true;
     while(hasMore) {
         const offset = (page - 1) * 200;
+        // ★ エラーの原因になる .name は外しています
         const coql = { "select_query": "select ClosingDay, VisitedDateTime, SyaryouCategory, FOrR, Seated, Option1, ServiceStore, ServicePerson, cancel, HanbaiCategory, Option2, Option3, Option15, Option4, Option5, Option16, Option7, Option8, Option9, Option10, Option6, BackCamera, Option17, TradeinCar, PaymentCategory, arari16, arari17, Option14, arari21, arari22, arari23, arari24, arari25 from Services where ((ClosingDay between '" + start + "' and '" + end + "') or (VisitedDateTime between '" + start + "T00:00:00+09:00' and '" + end + "T23:59:59+09:00')) limit " + offset + ", 200" };
         
         try { 
@@ -37,9 +38,7 @@ async function fetchByCOQL() {
         } catch (e) { hasMore = false; }
     } 
 
-    // ★ 担当者名(ID)をMastersモジュールから名前に変換する処理を待つ
     await resolveMastersNames();
-    
     renderAll();
 }
 
@@ -50,7 +49,8 @@ async function resolveMastersNames() {
 
     loadingEl.innerHTML = "担当者名(" + ids.length + "名)を照合中...";
 
-    await Promise.all(ids.map(async (id) => {
+    // ★ APIエラー（同時リクエスト上限）を防ぐため、1件ずつ確実に取得します
+    for (let id of ids) {
         if (!personMap[id]) {
             try {
                 var res = await ZOHO.CRM.API.getRecord({ Entity: "Masters", RecordID: id });
@@ -58,7 +58,7 @@ async function resolveMastersNames() {
                 else personMap[id] = "ID:" + id;
             } catch (e) { personMap[id] = "ID:" + id; }
         }
-    }));
+    }
 }
 
 function createStats() { return { j_k:0, j_f:0, v_n_k:0, v_n_f:0, sho_k:0, sho_f:0, ab_k:0, ab_f:0, jk_k:0, jk_f:0, rv_k:0, rv_f:0, rj_k:0, rj_f:0, tot_v_k:0, tot_v_f:0, n_k:0, n_f:0, m_k:0, m_f:0, c_k:0, c_f:0, o2_k:0, o2_f:0, o3_k:0, o3_f:0, pk_k:0, pk_f:0, ct_k:0, ct_f:0, up_k:0, up_f:0, tp_k:0, tp_f:0, ic_k:0, ic_f:0, rst_k:0, rst_f:0, ni_k:0, ni_f:0, nu_k:0, nu_f:0, hp_k:0, hp_f:0, fl_k:0, fl_f:0, aq_k:0, aq_f:0, tr_k:0, tr_f:0, ln_k:0, ln_f:0, l84_k:0, l84_f:0, r69_k:0, r69_f:0, r59_k:0, r59_f:0, r49_k:0, r49_f:0, r39_k:0, r39_f:0, r29_k:0, r29_f:0, low_k:0, low_f:0, zn_k:0, zn_f:0, ar21_k:0, ar21_f:0, ar22_k:0, ar22_f:0, ar23_k:0, ar23_f:0, ar24_k:0, ar24_f:0, ar25_k:0, ar25_f:0, ar_cnt_k:0, ar_cnt_f:0, g_sls:0 }; }
@@ -72,19 +72,27 @@ function aggregate(s, rec) {
 }
 
 function renderAll() {
+    document.getElementById('loading').style.display = 'none';
     var gS = {}, totalS = createStats(); staffStatsMaster = {}; storeStatsMaster = {}; var groupSet = new Set(), storeSet = new Set();
     
-    allData.forEach(r => {
+    // ★ 空データの時のメッセージを復活
+    if(!allData || allData.length === 0) {
+        document.getElementById("group-table-container").innerHTML = "<p style='padding:20px;'>データがありません。</p>";
+        document.getElementById("store-table-container").innerHTML = "<p style='padding:20px;'>データがありません。</p>";
+        document.getElementById("staff-table-container").innerHTML = "<p style='padding:20px;'>データがありません。</p>";
+        return;
+    }
+
+    allData.forEach(r => { 
         var st = r.ServiceStore || "未所属", gr = storeToGroup[st] || "未所属";
         var pr = "未設定";
         if (r.ServicePerson && r.ServicePerson.id) pr = personMap[r.ServicePerson.id] || "ID:" + r.ServicePerson.id;
 
-        if(!gS[gr]) gS[gr] = createStats(); if(!storeStatsMaster[st]) storeStatsMaster[st] = createStats(); if(!staffStatsMaster[pr]) staffStatsMaster[pr] = createStats();
-        storeGroupMap[st] = gr; staffStoreMap[pr] = st; groupSet.add(gr); storeSet.add(st);
-        [gS[gr], storeStatsMaster[st], staffStatsMaster[pr], totalS].forEach(s => aggregate(s, r));
+        if(!gS[gr]) gS[gr] = createStats(); if(!storeStatsMaster[st]) storeStatsMaster[st] = createStats(); if(!staffStatsMaster[pr]) staffStatsMaster[pr] = createStats(); 
+        storeGroupMap[st] = gr; staffStoreMap[pr] = st; groupSet.add(gr); storeSet.add(st); 
+        [gS[gr], storeStatsMaster[st], staffStatsMaster[pr], totalS].forEach(s => aggregate(s, r)); 
     });
 
-    document.getElementById('loading').style.display = 'none';
     updateSelector('group-selector', groupSet, '全グループ表示'); updateSelector('store-selector', storeSet, '全店舗表示');
     document.getElementById("group-table-container").innerHTML = buildTable(gS, "グループ名", totalS);
     filterStoreByGroup(); filterStaffByStore();
