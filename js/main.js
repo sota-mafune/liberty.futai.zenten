@@ -1,6 +1,6 @@
 var allData = [];
 var staffStatsMaster = {}, storeStatsMaster = {}, storeGroupMap = {}, staffStoreMap = {};
-var personMap = {}; // IDと名前の対応表を保持
+var personMap = {}; 
 
 var storeToGroup = { "神戸店":"兵四", "久米窪田店":"兵四", "高知高須店":"兵四", "北久米店":"兵四", "尼崎店":"兵四", "高槻店":"大阪", "八尾店":"大阪", "堺大泉緑地前店":"大阪", "松原天美店":"大阪", "貝塚店":"大阪", "大津店":"滋三", "栗東店":"滋三", "彦根店":"滋三", "津店":"滋三", "松阪店":"滋三", "鯖江店":"滋三", "久御山店":"京奈", "171店":"京奈", "精華店":"京奈", "西大和店":"京奈", "橿原店":"京奈", "熊本インター店":"旧Dj", "長田店":"旧Dj", "outlet店":"旧Dj", "舞鶴店":"旧Dj", "福知山店":"旧Dj", "加古川店":"旧Dj", "BYD滋賀":"未所属" };
 
@@ -37,31 +37,20 @@ async function fetchByCOQL() {
         } catch (e) { hasMore = false; }
     } 
 
-    // Mastersモジュールの名前を解決
     await resolveMastersNames();
-    
     renderAll();
 }
 
 async function resolveMastersNames() {
-    var loadingEl = document.getElementById('loading');
     var ids = [...new Set(allData.map(r => r.ServicePerson ? r.ServicePerson.id : null).filter(id => id))];
     if (ids.length === 0) return;
-
-    loadingEl.innerHTML = "担当者名(" + ids.length + "名)を照合中...";
-
     for (let id of ids) {
         if (!personMap[id]) {
             try {
                 var res = await ZOHO.CRM.API.getRecord({ Entity: "Masters", RecordID: id });
-                if(res.data && res.data.length > 0) {
-                    personMap[id] = res.data[0].Name || "名称未設定";
-                } else {
-                    personMap[id] = "ID:" + id;
-                }
-            } catch (e) {
-                personMap[id] = "ID:" + id;
-            }
+                if(res.data && res.data.length > 0) personMap[id] = res.data[0].Name || "名称未設定";
+                else personMap[id] = "ID:" + id;
+            } catch (e) { personMap[id] = "ID:" + id; }
         }
     }
 }
@@ -80,13 +69,8 @@ function renderAll() {
     var gS = {}, totalS = createStats(); staffStatsMaster = {}; storeStatsMaster = {}; var groupSet = new Set(), storeSet = new Set();
     allData.forEach(r => { 
         var st = r.ServiceStore || "未所属", gr = storeToGroup[st] || "未所属";
-        var pr = "未設定";
-        if (r.ServicePerson && r.ServicePerson.id) {
-            pr = personMap[r.ServicePerson.id] || "ID:" + r.ServicePerson.id;
-        }
-        if(!gS[gr]) gS[gr] = createStats(); 
-        if(!storeStatsMaster[st]) storeStatsMaster[st] = createStats(); 
-        if(!staffStatsMaster[pr]) staffStatsMaster[pr] = createStats(); 
+        var pr = "未設定"; if (r.ServicePerson && r.ServicePerson.id) { pr = personMap[r.ServicePerson.id] || "ID:" + r.ServicePerson.id; }
+        if(!gS[gr]) gS[gr] = createStats(); if(!storeStatsMaster[st]) storeStatsMaster[st] = createStats(); if(!staffStatsMaster[pr]) staffStatsMaster[pr] = createStats(); 
         storeGroupMap[st] = gr; staffStoreMap[pr] = st; groupSet.add(gr); storeSet.add(st); 
         [gS[gr], storeStatsMaster[st], staffStatsMaster[pr], totalS].forEach(s => aggregate(s, r)); 
     });
@@ -103,11 +87,10 @@ function buildTable(sum, title, totalS) {
     var h = "<table><thead><tr>";
     h += "<th class='sticky-col-item shop-header' style='position: sticky !important; z-index: 300 !important; top: 0; left: 0;'>" + (title || "KPI項目") + "</th>";
     h += "<th class='sticky-col-total shop-header' style='position: sticky !important; z-index: 290 !important; top: 0; left: 170px;'>合計</th>";
-    for(var i=0; i<keys.length; i++) {
-        h += "<th class='shop-header' style='position: sticky !important; z-index: 150 !important; top: 0;'>" + keys[i] + "</th>";
-    }
+    for(var i=0; i<keys.length; i++) { h += "<th class='shop-header' style='position: sticky !important; z-index: 150 !important; top: 0;'>" + keys[i] + "</th>"; }
     h += "</tr></thead><tbody>";
 
+    // ★ 中略せず、すべての行定義を復活させました
     const rowDef = [
         { sec: "予算・目標" }, { lbl: "予算", m: "empty" }, { lbl: "目標", m: "empty" }, { lbl: "昨年実績", m: "empty" }, { lbl: "現時点予算", m: "empty" },
         { sec: "基本実績" }, { lbl: "実績", m: "j", cls: "#ffe599" }, { lbl: "達成率", type: "ratio", n: "j", d: "g_sls" }, { lbl: "昨年実績(当日)", m: "empty", cls: "#d9d2e9" }, { lbl: "昨年対比", m: "empty", cls: "#d9d2e9" },
@@ -128,15 +111,10 @@ function buildTable(sum, title, totalS) {
     for(var j=0; j<rowDef.length; j++){ 
         var r = rowDef[j]; 
         if(r.sec) {
-            h += "<tr>";
-            h += "<td class='sticky-col-item section-row' style='position: sticky !important; z-index: 180 !important; left: 0; border-right: none;'>" + r.sec + "</td>";
-            h += "<td class='sticky-col-total section-row' style='position: sticky !important; z-index: 170 !important; left: 170px; border-left: none;'></td>";
-            if (keys.length > 0) {
-                h += "<td colspan='" + keys.length + "' class='section-row' style='position: static; border-left: none;'></td>";
-            }
+            h += "<tr><td class='sticky-col-item section-row' style='position: sticky !important; z-index: 180 !important; left: 0; border-right: none;'>" + r.sec + "</td><td class='sticky-col-total section-row' style='position: sticky !important; z-index: 170 !important; left: 170px; border-left: none;'></td>";
+            if (keys.length > 0) { h += "<td colspan='" + keys.length + "' class='section-row' style='position: static; border-left: none;'></td>"; }
             h += "</tr>";
-        }
-        else {
+        } else {
             h += "<tr><td class='sticky-col-item' style='background-color:"+(r.cls||"#fff")+"'>"+r.lbl+"</td>";
             h += renderCell(totalS, r, true); 
             for(var k=0; k<keys.length; k++) h += renderCell(sum[keys[k]], r, false);
@@ -172,11 +150,8 @@ function renderCell(s, r, isT) {
 }
 
 function showPage(id) { 
-    document.querySelectorAll('.page-content').forEach(p => p.classList.remove('active')); 
-    document.getElementById(id).classList.add('active'); 
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    var btn = document.getElementById('btn-' + id.replace('-page', ''));
-    if(btn) btn.classList.add('active');
+    document.querySelectorAll('.page-content').forEach(p => p.classList.remove('active')); document.getElementById(id).classList.add('active'); 
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active')); var btn = document.getElementById('btn-' + id.replace('-page', '')); if(btn) btn.classList.add('active');
     document.getElementById('group-filter-area').style.display = (id === 'store-page') ? 'flex' : 'none'; 
     document.getElementById('staff-filter-area').style.display = (id === 'staff-page') ? 'flex' : 'none'; 
 }
