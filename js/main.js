@@ -48,17 +48,18 @@ function renderAll() {
 function updateSelector(id, set, def) { var sel = document.getElementById(id); sel.innerHTML = '<option value="all">' + def + '</option>'; Array.from(set).sort().forEach(v => { var o = document.createElement('option'); o.value = o.text = v; sel.add(o); }); }
 
 function buildTable(sum, title, totalS) {
-    var keys = Object.keys(sum).sort();
+var keys = Object.keys(sum).sort();
     
-    // 【修正箇所】見出しセルの z-index と sticky を強化
+    // 見出しの 1行目 を作る部分
     var h = "<table><thead><tr>";
-    h += "<th class='sticky-col-item shop-header' style='position: sticky !important; z-index: 300 !important; top: 0; left: 0;'>" + (title || "KPI項目") + "</th>";
+    // ★ title (グループ名/店舗名/担当者名) が入るように修正
+    h += "<th class='sticky-col-item shop-header' style='position: sticky !important; z-index: 300 !important; top: 0; left: 0;'>" + (title || "項目名") + "</th>";
     h += "<th class='sticky-col-total shop-header' style='position: sticky !important; z-index: 290 !important; top: 0; left: 170px;'>合計</th>";
+    
     for(var i=0; i<keys.length; i++) {
-        h += "<th class='shop-header' style='position: sticky !important; z-index: 150; top: 0;'>" + keys[i] + "</th>";
+        h += "<th class='shop-header' style='position: sticky !important; z-index: 150 !important; top: 0;'>" + keys[i] + "</th>";
     }
     h += "</tr></thead><tbody>";
-
     const rowDef = [
         { sec: "予算・目標" }, { lbl: "予算", m: "empty", cls: "#ffffff" }, { lbl: "目標", m: "empty", cls: "#ffffff" }, { lbl: "昨年実績", m: "empty", cls: "#ffffff" }, { lbl: "現時点予算", m: "empty", cls: "#ffffff" },
         { sec: "基本実績" }, { lbl: "実績", m: "j", cls: "#ffe599" }, { lbl: "達成率", type: "ratio", n: "j", d: "g_sls", cls: "#ffffff" }, { lbl: "昨年実績(当日)", m: "empty", cls: "#d9d2e9" }, { lbl: "昨年対比", m: "empty", cls: "#d9d2e9" },
