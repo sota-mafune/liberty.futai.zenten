@@ -68,3 +68,13 @@ th, td {
 .force-red { color: #ff0000 !important; }
 #loading { padding: 20px; color: #e67e22; font-weight: bold; }
 .page-content { display: none; } .page-content.active { display: block; }
+
+/* ★ここから追加：JSから色を指定するためのクラス */
+.bg-white { background-color: #ffffff !important; }
+.bg-yellow { background-color: #ffe599 !important; }
+.bg-purple { background-color: #d9d2e9 !important; }
+.bg-red-light { background-color: #f4cccc !important; }
+.bg-green { background-color: #b6d7a8 !important; }
+.bg-cyan { background-color: #a2c4c9 !important; }
+.bg-blue { background-color: #a4c2f4 !important; }
+.bg-pink { background-color: #ead1dc !important; }
