@@ -20,7 +20,7 @@ async function fetchByCOQL() {
     let page = 1, hasMore = true;
     while(hasMore) {
         const offset = (page - 1) * 200;
-        const coql = { "select_query": "select ClosingDay, VisitedDateTime, SyaryouCategory, FOrR, Seated, Option1, ServiceStore, ServicePerson, cancel, HanbaiCategory, Option2, Option3, Option15, Option4, Option5, Option16, Option7, Option8, Option9, Option10, Option6, BackCamera, Option17, TradeinCar, PaymentCategory, arari16, arari17, Option14, arari21, arari22, arari23, arari24, arari25 from Services where ((ClosingDay between '" + start + "' and '" + end + "') or (VisitedDateTime between '" + start + "T00:00:00+09:00' and '" + end + "T23:59:59+09:00')) limit " + offset + ", 200" };
+        const coql = { "select_query": "select ClosingDay, VisitedDateTime, SyaryouCategory, FOrR, Seated, Option1, ServiceStore, ServicePerson.name, cancel, HanbaiCategory, Option2, Option3, Option15, Option4, Option5, Option16, Option7, Option8, Option9, Option10, Option6, BackCamera, Option17, TradeinCar, PaymentCategory, arari16, arari17, Option14, arari21, arari22, arari23, arari24, arari25 from Services where ((ClosingDay between '" + start + "' and '" + end + "') or (VisitedDateTime between '" + start + "T00:00:00+09:00' and '" + end + "T23:59:59+09:00')) limit " + offset + ", 200" };
         try { const res = await ZOHO.CRM.API.coql(coql); if (res.data) { allData = allData.concat(res.data); if (res.info && res.info.more_records) page++; else hasMore = false; } else hasMore = false; } catch (e) { hasMore = false; }
     } renderAll();
 }
@@ -37,12 +37,48 @@ function aggregate(s, rec) {
 
 function renderAll() {
     document.getElementById('loading').style.display = 'none';
-    var gS = {}, totalS = createStats(); staffStatsMaster = {}; storeStatsMaster = {}; var groupSet = new Set(), storeSet = new Set();
-    if(!allData || allData.length === 0) { document.getElementById("group-table-container").innerHTML = "<p style='padding:20px;'>データがありません。</p>"; return; }
-    allData.forEach(r => { var st = r.ServiceStore || "未所属", gr = storeToGroup[st] || "未所属", pr = (r.ServicePerson && r.ServicePerson.name) ? r.ServicePerson.name : "未設定"; if(!gS[gr]) gS[gr] = createStats(); if(!storeStatsMaster[st]) storeStatsMaster[st] = createStats(); if(!staffStatsMaster[pr]) staffStatsMaster[pr] = createStats(); storeGroupMap[st] = gr; staffStoreMap[pr] = st; groupSet.add(gr); storeSet.add(st); [gS[gr], storeStatsMaster[st], staffStatsMaster[pr], totalS].forEach(s => aggregate(s, r)); });
-    updateSelector('group-selector', groupSet, '全グループ表示'); updateSelector('store-selector', storeSet, '全店舗表示');
+    var gS = {}, totalS = createStats(); 
+    staffStatsMaster = {}; 
+    storeStatsMaster = {}; 
+    var groupSet = new Set(), storeSet = new Set();
+
+    if(!allData || allData.length === 0) { 
+        document.getElementById("group-table-container").innerHTML = "<p style='padding:20px;'>データがありません。</p>"; 
+        return; 
+    }
+
+    allData.forEach(r => {
+        var st = r.ServiceStore || "未所属";
+        var gr = storeToGroup[st] || "未所属";
+        
+        // ★診断用：F12キーのコンソールでこれが出るか確認してください
+        console.log("取得レコードの担当者情報:", r.ServicePerson);
+
+        // ルックアップ項目の名前を抽出（ここが名前の決め手）
+        var pr = (r.ServicePerson && r.ServicePerson.name) ? r.ServicePerson.name : "未設定";
+
+        if(!gS[gr]) gS[gr] = createStats();
+        if(!storeStatsMaster[st]) storeStatsMaster[st] = createStats();
+        if(!staffStatsMaster[pr]) staffStatsMaster[pr] = createStats();
+        
+        storeGroupMap[st] = gr;
+        staffStoreMap[pr] = st;
+        groupSet.add(gr);
+        storeSet.add(st);
+
+        // 各マスターに数値を集計
+        [gS[gr], storeStatsMaster[st], staffStatsMaster[pr], totalS].forEach(s => aggregate(s, r));
+    });
+
+    updateSelector('group-selector', groupSet, '全グループ表示');
+    updateSelector('store-selector', storeSet, '全店舗表示');
+
+    // 最初に表示するグループ表を作成
     document.getElementById("group-table-container").innerHTML = buildTable(gS, "グループ名", totalS);
-    filterStoreByGroup(); filterStaffByStore();
+    
+    // 店舗別・担当者別のデータもあらかじめ準備
+    filterStoreByGroup();
+    filterStaffByStore();
 }
 
 function updateSelector(id, set, def) { var sel = document.getElementById(id); sel.innerHTML = '<option value="all">' + def + '</option>'; Array.from(set).sort().forEach(v => { var o = document.createElement('option'); o.value = o.text = v; sel.add(o); }); }
