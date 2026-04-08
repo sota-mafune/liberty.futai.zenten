@@ -1,6 +1,5 @@
 var allData = [];
 var staffStatsMaster = {}, storeStatsMaster = {}, storeGroupMap = {}, staffStoreMap = {};
-var personMap = {}; // IDと名前の対応表
 
 var storeToGroup = { "神戸店":"兵四", "久米窪田店":"兵四", "高知高須店":"兵四", "北久米店":"兵四", "尼崎店":"兵四", "高槻店":"大阪", "八尾店":"大阪", "堺大泉緑地前店":"大阪", "松原天美店":"大阪", "貝塚店":"大阪", "大津店":"滋三", "栗東店":"滋三", "彦根店":"滋三", "津店":"滋三", "松阪店":"滋三", "鯖江店":"滋三", "久御山店":"京奈", "171店":"京奈", "精華店":"京奈", "西大和店":"京奈", "橿原店":"京奈", "熊本インター店":"旧Dj", "長田店":"旧Dj", "outlet店":"旧Dj", "舞鶴店":"旧Dj", "福知山店":"旧Dj", "加古川店":"旧Dj", "BYD滋賀":"未所属" };
 
@@ -15,89 +14,28 @@ function setInitialDates() { var now = new Date(); var y = now.getFullYear(), m 
 function syncMonthToCalendar() { var v = document.getElementById('month-selector').value, p = v.split("-").map(Number), l = new Date(p[0], p[1], 0).getDate(); document.getElementById('start-date').value = v + "-01"; document.getElementById('end-date').value = v + "-" + l; fetchByCOQL(); }
 
 async function fetchByCOQL() {
-    var loadingEl = document.getElementById('loading');
-    loadingEl.style.display = 'block';
-    loadingEl.style.fontSize = "14px";
-    loadingEl.style.textAlign = "left";
-    loadingEl.innerHTML = "【スピード＆取得テスト中...】<br>";
-
+    allData = []; 
+    document.getElementById('loading').style.display = 'block';
+    
     const start = document.getElementById('start-date').value, end = document.getElementById('end-date').value;
     if(!start || !end) return;
 
-    // ★ ターゲットである ServicePerson.Name を直指定して10件だけ取得する超軽量クエリ
-    const coql = { 
-        "select_query": "select ClosingDay, ServiceStore, ServicePerson.Name from Services where ((ClosingDay between '" + start + "' and '" + end + "') or (VisitedDateTime between '" + start + "T00:00:00+09:00' and '" + end + "T23:59:59+09:00')) limit 0, 10" 
-    };
-
-    try {
-        loadingEl.innerHTML += "COQLリクエスト送信中...<br>";
+    let page = 1, hasMore = true;
+    while(hasMore) {
+        const offset = (page - 1) * 200;
+        // ★ ServicePerson.Name を直指定した爆速クエリ
+        const coql = { "select_query": "select ClosingDay, VisitedDateTime, SyaryouCategory, FOrR, Seated, Option1, ServiceStore, ServicePerson.Name, cancel, HanbaiCategory, Option2, Option3, Option15, Option4, Option5, Option16, Option7, Option8, Option9, Option10, Option6, BackCamera, Option17, TradeinCar, PaymentCategory, arari16, arari17, Option14, arari21, arari22, arari23, arari24, arari25 from Services where ((ClosingDay between '" + start + "' and '" + end + "') or (VisitedDateTime between '" + start + "T00:00:00+09:00' and '" + end + "T23:59:59+09:00')) limit " + offset + ", 200" };
         
-        // 取得スピードの計測もします
-        const startTime = performance.now();
-        const res = await ZOHO.CRM.API.coql(coql);
-        const endTime = performance.now();
-        const timeTaken = Math.round(endTime - startTime);
+        try { 
+            const res = await ZOHO.CRM.API.coql(coql); 
+            if (res.data) { 
+                allData = allData.concat(res.data); 
+                if (res.info && res.info.more_records) page++; else hasMore = false; 
+            } else hasMore = false; 
+        } catch (e) { hasMore = false; }
+    } 
 
-        if (res.data && res.data.length > 0) {
-            loadingEl.innerHTML += `<span style='color:green;'>✅ 通信成功！（${timeTaken}ミリ秒）</span><br><br>`;
-            loadingEl.innerHTML += "<b>【Zohoから返ってきた生データ（1件目）】</b><br>";
-            loadingEl.innerHTML += "<pre style='background:#222; color:#0f0; padding:15px; border-radius:5px;'>" + JSON.stringify(res.data[0], null, 2) + "</pre>";
-            console.log("テスト取得結果:", res.data);
-        } else {
-            loadingEl.innerHTML += "<span style='color:orange;'>データが0件、またはレスポンスが空です。</span><br><pre>" + JSON.stringify(res, null, 2) + "</pre>";
-        }
-    } catch (e) {
-        loadingEl.innerHTML += "<span style='color:red;'>❌ エラー発生！（ServicePerson.Name は直指定できませんでした）</span><br><br>";
-        loadingEl.innerHTML += "<b>【Zohoからのエラーメッセージ】</b><br>";
-        loadingEl.innerHTML += "<pre style='background:#ffeeee; padding:15px; border:1px solid #f00;'>" + (e.message || JSON.stringify(e, null, 2)) + "</pre>";
-    }
-}
-
-// async function fetchByCOQL() {
-//     allData = []; 
-//     var loadingEl = document.getElementById('loading');
-//     loadingEl.style.display = 'block';
-//     loadingEl.innerHTML = "実績データ取得中...";
-    
-//     const start = document.getElementById('start-date').value, end = document.getElementById('end-date').value;
-//     if(!start || !end) return;
-
-//     let page = 1, hasMore = true;
-//     while(hasMore) {
-//         const offset = (page - 1) * 200;
-//         // ★ エラーの原因になる .name は外しています
-//         const coql = { "select_query": "select ClosingDay, VisitedDateTime, SyaryouCategory, FOrR, Seated, Option1, ServiceStore, ServicePerson, cancel, HanbaiCategory, Option2, Option3, Option15, Option4, Option5, Option16, Option7, Option8, Option9, Option10, Option6, BackCamera, Option17, TradeinCar, PaymentCategory, arari16, arari17, Option14, arari21, arari22, arari23, arari24, arari25 from Services where ((ClosingDay between '" + start + "' and '" + end + "') or (VisitedDateTime between '" + start + "T00:00:00+09:00' and '" + end + "T23:59:59+09:00')) limit " + offset + ", 200" };
-        
-//         try { 
-//             const res = await ZOHO.CRM.API.coql(coql); 
-//             if (res.data) { 
-//                 allData = allData.concat(res.data); 
-//                 if (res.info && res.info.more_records) page++; else hasMore = false; 
-//             } else hasMore = false; 
-//         } catch (e) { hasMore = false; }
-//     } 
-
-//     await resolveMastersNames();
-//     renderAll();
-// }
-
-async function resolveMastersNames() {
-    var loadingEl = document.getElementById('loading');
-    var ids = [...new Set(allData.map(r => r.ServicePerson ? r.ServicePerson.id : null).filter(id => id))];
-    if (ids.length === 0) return;
-
-    loadingEl.innerHTML = "担当者名(" + ids.length + "名)を照合中...";
-
-    // ★ APIエラー（同時リクエスト上限）を防ぐため、1件ずつ確実に取得します
-    for (let id of ids) {
-        if (!personMap[id]) {
-            try {
-                var res = await ZOHO.CRM.API.getRecord({ Entity: "Masters", RecordID: id });
-                if (res.data && res.data.length > 0) personMap[id] = res.data[0].Name || "名称未設定";
-                else personMap[id] = "ID:" + id;
-            } catch (e) { personMap[id] = "ID:" + id; }
-        }
-    }
+    renderAll();
 }
 
 function createStats() { return { j_k:0, j_f:0, v_n_k:0, v_n_f:0, sho_k:0, sho_f:0, ab_k:0, ab_f:0, jk_k:0, jk_f:0, rv_k:0, rv_f:0, rj_k:0, rj_f:0, tot_v_k:0, tot_v_f:0, n_k:0, n_f:0, m_k:0, m_f:0, c_k:0, c_f:0, o2_k:0, o2_f:0, o3_k:0, o3_f:0, pk_k:0, pk_f:0, ct_k:0, ct_f:0, up_k:0, up_f:0, tp_k:0, tp_f:0, ic_k:0, ic_f:0, rst_k:0, rst_f:0, ni_k:0, ni_f:0, nu_k:0, nu_f:0, hp_k:0, hp_f:0, fl_k:0, fl_f:0, aq_k:0, aq_f:0, tr_k:0, tr_f:0, ln_k:0, ln_f:0, l84_k:0, l84_f:0, r69_k:0, r69_f:0, r59_k:0, r59_f:0, r49_k:0, r49_f:0, r39_k:0, r39_f:0, r29_k:0, r29_f:0, low_k:0, low_f:0, zn_k:0, zn_f:0, ar21_k:0, ar21_f:0, ar22_k:0, ar22_f:0, ar23_k:0, ar23_f:0, ar24_k:0, ar24_f:0, ar25_k:0, ar25_f:0, ar_cnt_k:0, ar_cnt_f:0, g_sls:0 }; }
@@ -114,22 +52,19 @@ function renderAll() {
     document.getElementById('loading').style.display = 'none';
     var gS = {}, totalS = createStats(); staffStatsMaster = {}; storeStatsMaster = {}; var groupSet = new Set(), storeSet = new Set();
     
-    // ★ 空データの時のメッセージを復活
     if(!allData || allData.length === 0) {
         document.getElementById("group-table-container").innerHTML = "<p style='padding:20px;'>データがありません。</p>";
-        document.getElementById("store-table-container").innerHTML = "<p style='padding:20px;'>データがありません。</p>";
-        document.getElementById("staff-table-container").innerHTML = "<p style='padding:20px;'>データがありません。</p>";
         return;
     }
 
-    allData.forEach(r => { 
+    allData.forEach(r => {
         var st = r.ServiceStore || "未所属", gr = storeToGroup[st] || "未所属";
-        var pr = "未設定";
-        if (r.ServicePerson && r.ServicePerson.id) pr = personMap[r.ServicePerson.id] || "ID:" + r.ServicePerson.id;
+        // ★ ここで "ServicePerson.Name" という文字列キーを直接引き出します
+        var pr = r["ServicePerson.Name"] || "未設定";
 
-        if(!gS[gr]) gS[gr] = createStats(); if(!storeStatsMaster[st]) storeStatsMaster[st] = createStats(); if(!staffStatsMaster[pr]) staffStatsMaster[pr] = createStats(); 
-        storeGroupMap[st] = gr; staffStoreMap[pr] = st; groupSet.add(gr); storeSet.add(st); 
-        [gS[gr], storeStatsMaster[st], staffStatsMaster[pr], totalS].forEach(s => aggregate(s, r)); 
+        if(!gS[gr]) gS[gr] = createStats(); if(!storeStatsMaster[st]) storeStatsMaster[st] = createStats(); if(!staffStatsMaster[pr]) staffStatsMaster[pr] = createStats();
+        storeGroupMap[st] = gr; staffStoreMap[pr] = st; groupSet.add(gr); storeSet.add(st);
+        [gS[gr], storeStatsMaster[st], staffStatsMaster[pr], totalS].forEach(s => aggregate(s, r));
     });
 
     updateSelector('group-selector', groupSet, '全グループ表示'); updateSelector('store-selector', storeSet, '全店舗表示');
@@ -147,7 +82,7 @@ function buildTable(sum, title, totalS) {
     for(var i=0; i<keys.length; i++) { h += "<th class='shop-header' style='position: sticky !important; z-index: 150 !important; top: 0;'>" + keys[i] + "</th>"; }
     h += "</tr></thead><tbody>";
 
-    // ★ お気に入りの「色指定（cls: '#...'）」に完全に戻しました！
+    // ★ お気に入りの「色指定（cls: '#...'）」
     const rowDef = [
         { sec: "予算・目標" }, { lbl: "予算", m: "empty", cls: "#ffffff" }, { lbl: "目標", m: "empty", cls: "#ffffff" }, { lbl: "昨年実績", m: "empty", cls: "#ffffff" }, { lbl: "現時点予算", m: "empty", cls: "#ffffff" },
         { sec: "基本実績" }, { lbl: "実績", m: "j", cls: "#ffe599" }, { lbl: "達成率", type: "ratio", n: "j", d: "g_sls", cls: "#ffffff" }, { lbl: "昨年実績(当日)", m: "empty", cls: "#d9d2e9" }, { lbl: "昨年対比", m: "empty", cls: "#d9d2e9" },
@@ -177,7 +112,6 @@ function buildTable(sum, title, totalS) {
             h += "</tr>";
         }
         else {
-            // ★ 背景色をインラインで直接指定するお気に入りの方式
             h += "<tr><td class='sticky-col-item' style='background-color:"+(r.cls||"#fff")+"'>"+r.lbl+"</td>";
             h += renderCell(totalS, r, true); 
             for(var k=0; k<keys.length; k++) {
@@ -193,7 +127,6 @@ function renderCell(s, r, isT) {
     var kVal = "-", fVal = "-", tVal = "-", bg = r.cls || "#ffffff", textClass = r.redText ? "force-red" : "";
     var c = isT ? "sticky-col-total " : "";
     
-    // ★ ここも背景色を style='background-color:"+bg+"' で直接指定する方式
     if(r.m === "empty") { return "<td class='"+c+"' style='background-color:"+bg+"'><div class='cell-stack'><div class='stack-upper' style='display:flex;'><div class='val-kei'>-</div><div class='val-fu'>-</div></div><div class='stack-lower'>-</div></div></td>"; }
     else if(r.type && r.type.startsWith("arari")) {
         if(r.type === "arari_val") { kVal = s.j_k; fVal = s.j_f; tVal = kVal + fVal; }
