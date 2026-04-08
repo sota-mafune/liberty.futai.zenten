@@ -15,32 +15,71 @@ function setInitialDates() { var now = new Date(); var y = now.getFullYear(), m 
 function syncMonthToCalendar() { var v = document.getElementById('month-selector').value, p = v.split("-").map(Number), l = new Date(p[0], p[1], 0).getDate(); document.getElementById('start-date').value = v + "-01"; document.getElementById('end-date').value = v + "-" + l; fetchByCOQL(); }
 
 async function fetchByCOQL() {
-    allData = []; 
     var loadingEl = document.getElementById('loading');
     loadingEl.style.display = 'block';
-    loadingEl.innerHTML = "実績データ取得中...";
-    
+    loadingEl.style.fontSize = "14px";
+    loadingEl.style.textAlign = "left";
+    loadingEl.innerHTML = "【スピード＆取得テスト中...】<br>";
+
     const start = document.getElementById('start-date').value, end = document.getElementById('end-date').value;
     if(!start || !end) return;
 
-    let page = 1, hasMore = true;
-    while(hasMore) {
-        const offset = (page - 1) * 200;
-        // ★ エラーの原因になる .name は外しています
-        const coql = { "select_query": "select ClosingDay, VisitedDateTime, SyaryouCategory, FOrR, Seated, Option1, ServiceStore, ServicePerson, cancel, HanbaiCategory, Option2, Option3, Option15, Option4, Option5, Option16, Option7, Option8, Option9, Option10, Option6, BackCamera, Option17, TradeinCar, PaymentCategory, arari16, arari17, Option14, arari21, arari22, arari23, arari24, arari25 from Services where ((ClosingDay between '" + start + "' and '" + end + "') or (VisitedDateTime between '" + start + "T00:00:00+09:00' and '" + end + "T23:59:59+09:00')) limit " + offset + ", 200" };
-        
-        try { 
-            const res = await ZOHO.CRM.API.coql(coql); 
-            if (res.data) { 
-                allData = allData.concat(res.data); 
-                if (res.info && res.info.more_records) page++; else hasMore = false; 
-            } else hasMore = false; 
-        } catch (e) { hasMore = false; }
-    } 
+    // ★ ターゲットである ServicePerson.Name を直指定して10件だけ取得する超軽量クエリ
+    const coql = { 
+        "select_query": "select ClosingDay, ServiceStore, ServicePerson.Name from Services where ((ClosingDay between '" + start + "' and '" + end + "') or (VisitedDateTime between '" + start + "T00:00:00+09:00' and '" + end + "T23:59:59+09:00')) limit 0, 10" 
+    };
 
-    await resolveMastersNames();
-    renderAll();
+    try {
+        loadingEl.innerHTML += "COQLリクエスト送信中...<br>";
+        
+        // 取得スピードの計測もします
+        const startTime = performance.now();
+        const res = await ZOHO.CRM.API.coql(coql);
+        const endTime = performance.now();
+        const timeTaken = Math.round(endTime - startTime);
+
+        if (res.data && res.data.length > 0) {
+            loadingEl.innerHTML += `<span style='color:green;'>✅ 通信成功！（${timeTaken}ミリ秒）</span><br><br>`;
+            loadingEl.innerHTML += "<b>【Zohoから返ってきた生データ（1件目）】</b><br>";
+            loadingEl.innerHTML += "<pre style='background:#222; color:#0f0; padding:15px; border-radius:5px;'>" + JSON.stringify(res.data[0], null, 2) + "</pre>";
+            console.log("テスト取得結果:", res.data);
+        } else {
+            loadingEl.innerHTML += "<span style='color:orange;'>データが0件、またはレスポンスが空です。</span><br><pre>" + JSON.stringify(res, null, 2) + "</pre>";
+        }
+    } catch (e) {
+        loadingEl.innerHTML += "<span style='color:red;'>❌ エラー発生！（ServicePerson.Name は直指定できませんでした）</span><br><br>";
+        loadingEl.innerHTML += "<b>【Zohoからのエラーメッセージ】</b><br>";
+        loadingEl.innerHTML += "<pre style='background:#ffeeee; padding:15px; border:1px solid #f00;'>" + (e.message || JSON.stringify(e, null, 2)) + "</pre>";
+    }
 }
+
+// async function fetchByCOQL() {
+//     allData = []; 
+//     var loadingEl = document.getElementById('loading');
+//     loadingEl.style.display = 'block';
+//     loadingEl.innerHTML = "実績データ取得中...";
+    
+//     const start = document.getElementById('start-date').value, end = document.getElementById('end-date').value;
+//     if(!start || !end) return;
+
+//     let page = 1, hasMore = true;
+//     while(hasMore) {
+//         const offset = (page - 1) * 200;
+//         // ★ エラーの原因になる .name は外しています
+//         const coql = { "select_query": "select ClosingDay, VisitedDateTime, SyaryouCategory, FOrR, Seated, Option1, ServiceStore, ServicePerson, cancel, HanbaiCategory, Option2, Option3, Option15, Option4, Option5, Option16, Option7, Option8, Option9, Option10, Option6, BackCamera, Option17, TradeinCar, PaymentCategory, arari16, arari17, Option14, arari21, arari22, arari23, arari24, arari25 from Services where ((ClosingDay between '" + start + "' and '" + end + "') or (VisitedDateTime between '" + start + "T00:00:00+09:00' and '" + end + "T23:59:59+09:00')) limit " + offset + ", 200" };
+        
+//         try { 
+//             const res = await ZOHO.CRM.API.coql(coql); 
+//             if (res.data) { 
+//                 allData = allData.concat(res.data); 
+//                 if (res.info && res.info.more_records) page++; else hasMore = false; 
+//             } else hasMore = false; 
+//         } catch (e) { hasMore = false; }
+//     } 
+
+//     await resolveMastersNames();
+//     renderAll();
+// }
 
 async function resolveMastersNames() {
     var loadingEl = document.getElementById('loading');
