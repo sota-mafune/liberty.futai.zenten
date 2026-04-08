@@ -48,18 +48,21 @@ function renderAll() {
 function updateSelector(id, set, def) { var sel = document.getElementById(id); sel.innerHTML = '<option value="all">' + def + '</option>'; Array.from(set).sort().forEach(v => { var o = document.createElement('option'); o.value = o.text = v; sel.add(o); }); }
 
 function buildTable(sum, title, totalS) {
-var keys = Object.keys(sum).sort();
+var keys = Object.keys(sum).sort(); // ここに担当者名や店舗名のリストが入っています
     
-    // 見出しの 1行目 を作る部分
+    // 1. ヘッダー行の作成
     var h = "<table><thead><tr>";
-    // ★ title (グループ名/店舗名/担当者名) が入るように修正
+    // 左端固定列：項目名
     h += "<th class='sticky-col-item shop-header' style='position: sticky !important; z-index: 300 !important; top: 0; left: 0;'>" + (title || "項目名") + "</th>";
+    // 左から2番目固定列：合計
     h += "<th class='sticky-col-total shop-header' style='position: sticky !important; z-index: 290 !important; top: 0; left: 170px;'>合計</th>";
     
+    // ★ここが重要：担当者名（keys）の数だけ列を作るループ
     for(var i=0; i<keys.length; i++) {
         h += "<th class='shop-header' style='position: sticky !important; z-index: 150 !important; top: 0;'>" + keys[i] + "</th>";
     }
     h += "</tr></thead><tbody>";
+
     const rowDef = [
         { sec: "予算・目標" }, { lbl: "予算", m: "empty", cls: "#ffffff" }, { lbl: "目標", m: "empty", cls: "#ffffff" }, { lbl: "昨年実績", m: "empty", cls: "#ffffff" }, { lbl: "現時点予算", m: "empty", cls: "#ffffff" },
         { sec: "基本実績" }, { lbl: "実績", m: "j", cls: "#ffe599" }, { lbl: "達成率", type: "ratio", n: "j", d: "g_sls", cls: "#ffffff" }, { lbl: "昨年実績(当日)", m: "empty", cls: "#d9d2e9" }, { lbl: "昨年対比", m: "empty", cls: "#d9d2e9" },
@@ -77,13 +80,13 @@ var keys = Object.keys(sum).sort();
         { sec: "受注時想定" }, { lbl: "受注台数", type: "arari_val", val: "j", cls: "#ead1dc" }, { lbl: "@車両粗利", type: "arari_avg", val: "ar21", cls: "#ead1dc" }, { lbl: "@ローンBK", type: "arari_avg", val: "ar23", cls: "#ead1dc" }, { lbl: "@下取粗利", type: "arari_avg", val: "ar22", cls: "#ead1dc" }, { lbl: "@全部割(保証抜き)", type: "arari_avg", val: "ar24", cls: "#ead1dc" }, { lbl: "@全部割(保証込み)", type: "arari_avg", val: "ar25", cls: "#ead1dc" }, { lbl: "総粗利", type: "arari_sum", val: "ar25", cls: "#ead1dc" }
     ];
 
-    for(var j=0; j<rowDef.length; j++){ 
+for(var j=0; j<rowDef.length; j++){ 
         var r = rowDef[j]; 
         if(r.sec) {
-            // 【修正箇所】帯を分割して個別に sticky 指定
             h += "<tr>";
             h += "<td class='sticky-col-item section-row' style='position: sticky !important; z-index: 180 !important; left: 0; border-right: none;'>" + r.sec + "</td>";
             h += "<td class='sticky-col-total section-row' style='position: sticky !important; z-index: 170 !important; left: 170px; border-left: none;'></td>";
+            // ★ここ：セクション帯を右側まで伸ばす
             if (keys.length > 0) {
                 h += "<td colspan='" + keys.length + "' class='section-row' style='position: static; border-left: none;'></td>";
             }
@@ -92,13 +95,15 @@ var keys = Object.keys(sum).sort();
         else {
             h += "<tr><td class='sticky-col-item' style='background-color:"+(r.cls||"#fff")+"'>"+r.lbl+"</td>";
             h += renderCell(totalS, r, true); 
-            for(var k=0; k<keys.length; k++) h += renderCell(sum[keys[k]], r, false);
+            // ★ここ：各担当者のデータセルを作るループ
+            for(var k=0; k<keys.length; k++) {
+                h += renderCell(sum[keys[k]], r, false);
+            }
             h += "</tr>";
         }
     }
     h += "</tbody></table>"; return h;
 }
-
 function renderCell(s, r, isT) {
     var kVal = "-", fVal = "-", tVal = "-", bg = r.cls || "#ffffff", textClass = r.redText ? "force-red" : "";
     var c = isT ? "sticky-col-total " : "";
