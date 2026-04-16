@@ -52,22 +52,24 @@ async function resolveMastersNames() {
 
 // ★ エラー原因特定用：予算取得ロジック
 async function fetchAnalyticsBudgets() {
-    var loadingEl = document.getElementById('loading');
-    loadingEl.innerHTML += "<br>▶ 目標・予算データを取得中...";
     try {
-        // SDKの仕様に合わせて引数を厳密に指定
+        // 関数を呼び出す
         const res = await ZOHO.CRM.FUNCTIONS.execute("get_dashboard_budgets", { arguments: JSON.stringify({}) });
         
-        if(res && res.details && res.details.output) {
+        console.log("【予算レスポンス生データ】", res); // F12のコンソール用
+        
+        if(res && res.code === "SUCCESS" && res.details && res.details.output) {
             budgetDataGlobal = JSON.parse(res.details.output);
             var len = budgetDataGlobal.sales_budget ? budgetDataGlobal.sales_budget.length : 0;
-            loadingEl.innerHTML += "<br><span style='color:green;'>✅ 予算データの受信に成功！（" + len + "件）</span>";
+            // 成功した場合は件数をポップアップ
+            alert("✅ 予算データの受信に成功しました！\n取得できた売上予算の件数: " + len + "件");
         } else {
-            loadingEl.innerHTML += "<br><span style='color:orange;'>⚠️ 関数は動きましたが、返り値が空です（関数のAPI名を確認してください）</span>";
-            console.log("空のレスポンス:", res);
+            // 関数は動いたがデータがおかしい場合
+            alert("⚠️ 関数は呼ばれましたが、レスポンスが異常です。\n\n【レスポンス内容】\n" + JSON.stringify(res));
         }
     } catch(e) {
-        loadingEl.innerHTML += "<br><span style='color:red;'>❌ 関数の呼び出しに失敗しました</span>";
+        // 関数自体が呼べなかった場合
+        alert("❌ 関数の呼び出し自体に失敗しました。\n関数名（API名）が間違っているか、権限エラーの可能性があります。\n\n【エラー内容】\n" + JSON.stringify(e));
         console.error("予算データ取得エラー:", e);
     }
 }
