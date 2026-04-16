@@ -50,27 +50,20 @@ async function resolveMastersNames() {
     }));
 }
 
-// ★ エラー原因特定用：予算取得ロジック
+// ★ 本番用：予算取得ロジック（アラート除去＆判定修正版）
 async function fetchAnalyticsBudgets() {
     try {
-        // 関数を呼び出す
         const res = await ZOHO.CRM.FUNCTIONS.execute("get_dashboard_budgets", { arguments: JSON.stringify({}) });
         
-        console.log("【予算レスポンス生データ】", res); // F12のコンソール用
-        
-        if(res && res.code === "SUCCESS" && res.details && res.details.output) {
+        // "SUCCESS" でも "success" でも通るように toLowerCase() を追加
+        if(res && res.code && res.code.toLowerCase() === "success" && res.details && res.details.output) {
             budgetDataGlobal = JSON.parse(res.details.output);
-            var len = budgetDataGlobal.sales_budget ? budgetDataGlobal.sales_budget.length : 0;
-            // 成功した場合は件数をポップアップ
-            alert("✅ 予算データの受信に成功しました！\n取得できた売上予算の件数: " + len + "件");
+            console.log("✅ 予算データの受信に成功しました！", budgetDataGlobal);
         } else {
-            // 関数は動いたがデータがおかしい場合
-            alert("⚠️ 関数は呼ばれましたが、レスポンスが異常です。\n\n【レスポンス内容】\n" + JSON.stringify(res));
+            console.warn("⚠️ 予算取得：予期せぬレスポンス", res);
         }
     } catch(e) {
-        // 関数自体が呼べなかった場合
-        alert("❌ 関数の呼び出し自体に失敗しました。\n関数名（API名）が間違っているか、権限エラーの可能性があります。\n\n【エラー内容】\n" + JSON.stringify(e));
-        console.error("予算データ取得エラー:", e);
+        console.error("❌ 予算データ取得エラー:", e);
     }
 }
 
