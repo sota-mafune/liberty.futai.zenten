@@ -33,7 +33,7 @@ async function fetchByCOQL() {
     } 
 
     await resolveMastersNames();
-    await fetchAnalyticsBudgets(); // 予算の取得
+    await fetchAnalyticsBudgets();
     
     renderAll();
 }
@@ -50,12 +50,9 @@ async function resolveMastersNames() {
     }));
 }
 
-// ★ 本番用：予算取得ロジック（アラート除去＆判定修正版）
 async function fetchAnalyticsBudgets() {
     try {
         const res = await ZOHO.CRM.FUNCTIONS.execute("get_dashboard_budgets", { arguments: JSON.stringify({}) });
-        
-        // "SUCCESS" でも "success" でも通るように toLowerCase() を追加
         if(res && res.code && res.code.toLowerCase() === "success" && res.details && res.details.output) {
             budgetDataGlobal = JSON.parse(res.details.output);
             console.log("✅ 予算データの受信に成功しました！", budgetDataGlobal);
@@ -67,7 +64,7 @@ async function fetchAnalyticsBudgets() {
     }
 }
 
-function createStats() { return { budget_j:0, budget_current:0, budget_ad:0, j_k:0, j_f:0, v_n_k:0, v_n_f:0, sho_k:0, sho_f:0, ab_k:0, ab_f:0, jk_k:0, jk_f:0, rv_k:0, rv_f:0, rj_k:0, rj_f:0, tot_v_k:0, tot_v_f:0, n_k:0, n_f:0, m_k:0, m_f:0, c_k:0, c_f:0, o2_k:0, o2_f:0, o3_k:0, o3_f:0, pk_k:0, pk_f:0, ct_k:0, ct_f:0, up_k:0, up_f:0, tp_k:0, tp_f:0, ic_k:0, ic_f:0, rst_k:0, rst_f:0, ni_k:0, ni_f:0, nu_k:0, nu_f:0, hp_k:0, hp_f:0, fl_k:0, fl_f:0, aq_k:0, aq_f:0, tr_k:0, tr_f:0, ln_k:0, ln_f:0, l84_k:0, l84_f:0, r69_k:0, r69_f:0, r59_k:0, r59_f:0, r49_k:0, r49_f:0, r39_k:0, r39_f:0, r29_k:0, r29_f:0, low_k:0, low_f:0, zn_k:0, zn_f:0, ar21_k:0, ar21_f:0, ar22_k:0, ar22_f:0, ar23_k:0, ar23_f:0, ar24_k:0, ar24_f:0, ar25_k:0, ar25_f:0, ar_cnt_k:0, ar_cnt_f:0, g_sls:0 }; }
+function createStats() { return { budget_j:0, budget_current:0, j_k:0, j_f:0, v_n_k:0, v_n_f:0, sho_k:0, sho_f:0, ab_k:0, ab_f:0, jk_k:0, jk_f:0, rv_k:0, rv_f:0, rj_k:0, rj_f:0, tot_v_k:0, tot_v_f:0, n_k:0, n_f:0, m_k:0, m_f:0, c_k:0, c_f:0, o2_k:0, o2_f:0, o3_k:0, o3_f:0, pk_k:0, pk_f:0, ct_k:0, ct_f:0, up_k:0, up_f:0, tp_k:0, tp_f:0, ic_k:0, ic_f:0, rst_k:0, rst_f:0, ni_k:0, ni_f:0, nu_k:0, nu_f:0, hp_k:0, hp_f:0, fl_k:0, fl_f:0, aq_k:0, aq_f:0, tr_k:0, tr_f:0, ln_k:0, ln_f:0, l84_k:0, l84_f:0, r69_k:0, r69_f:0, r59_k:0, r59_f:0, r49_k:0, r49_f:0, r39_k:0, r39_f:0, r29_k:0, r29_f:0, low_k:0, low_f:0, zn_k:0, zn_f:0, ar21_k:0, ar21_f:0, ar22_k:0, ar22_f:0, ar23_k:0, ar23_f:0, ar24_k:0, ar24_f:0, ar25_k:0, ar25_f:0, ar_cnt_k:0, ar_cnt_f:0, g_sls:0 }; }
 
 function aggregate(s, rec) {
     var c = (rec.SyaryouCategory === "軽" || rec.SyaryouCategory === "軽自動車") ? "k" : "f";
@@ -91,31 +88,45 @@ function renderAll() {
         });
     }
 
-    // 予算データの割り振り
-    var matchCount = 0;
-    if(budgetDataGlobal && budgetDataGlobal.sales_budget) {
-        var selectedMonth = document.getElementById('month-selector').value; // "2026-04"
-        var targetDateStr = selectedMonth.replace("-", "/"); // "2026/04"
+    if(budgetDataGlobal) {
+        var selectedMonth = document.getElementById('month-selector').value; 
+        var targetDateStr = selectedMonth.replace("-", "/"); 
+        var endDateStr = document.getElementById('end-date').value.replace(/-/g, "/"); 
 
-        budgetDataGlobal.sales_budget.forEach(b => {
-            var d = b["月"] || "";
-            // 日付フォーマットの揺れに対応
-            if(d.includes(targetDateStr) || d.includes(selectedMonth)) {
-                matchCount++;
-                var st = b["店舗"], pr = b["担当者"], gr = storeToGroup[st] || "未所属";
-                var val = parseInt(b["成約台数予算"]) || 0;
-                
-                if(!gS[gr]) gS[gr] = createStats(); if(!storeStatsMaster[st]) storeStatsMaster[st] = createStats(); if(!staffStatsMaster[pr]) staffStatsMaster[pr] = createStats();
-                storeGroupMap[st] = gr; staffStoreMap[pr] = st; groupSet.add(gr); storeSet.add(st);
-                
-                gS[gr].budget_j += val; storeStatsMaster[st].budget_j += val; staffStatsMaster[pr].budget_j += val; totalS.budget_j += val;
-            }
-        });
+        // 1. 売上予算（成約台数）
+        if(budgetDataGlobal.sales_budget) {
+            budgetDataGlobal.sales_budget.forEach(b => {
+                var d = b["月"] || "";
+                if(d.includes(targetDateStr) || d.includes(selectedMonth)) {
+                    var st = b["店舗"], pr = b["担当者"], gr = storeToGroup[st] || "未所属";
+                    var val_j = parseInt(b["成約台数予算"]) || 0;
+                    
+                    if(!gS[gr]) gS[gr] = createStats(); if(!storeStatsMaster[st]) storeStatsMaster[st] = createStats(); if(!staffStatsMaster[pr]) staffStatsMaster[pr] = createStats();
+                    storeGroupMap[st] = gr; staffStoreMap[pr] = st; groupSet.add(gr); storeSet.add(st);
+                    
+                    gS[gr].budget_j += val_j; storeStatsMaster[st].budget_j += val_j; staffStatsMaster[pr].budget_j += val_j; totalS.budget_j += val_j;
+                }
+            });
+        }
+
+        // 2. 日次販売予算（現時点予算の算出用）
+        if(budgetDataGlobal.daily_budget) {
+            budgetDataGlobal.daily_budget.forEach(b => {
+                var d = (b["日"] || "").replace(/-/g, "/"); 
+                if(d.startsWith(targetDateStr) && d <= endDateStr) {
+                    var st = b["店舗"], gr = storeToGroup[st] || "未所属";
+                    var val_cur = parseInt(b["成約台数予算"]) || 0;
+                    
+                    if(!gS[gr]) gS[gr] = createStats(); if(!storeStatsMaster[st]) storeStatsMaster[st] = createStats();
+                    storeGroupMap[st] = gr; groupSet.add(gr); storeSet.add(st);
+                    
+                    gS[gr].budget_current += val_cur; storeStatsMaster[st].budget_current += val_cur; totalS.budget_current += val_cur;
+                }
+            });
+        }
     }
     
-    loadingEl.innerHTML += "<br>▶ 表を作成中... (当月の予算一致データ: " + matchCount + "件)";
-    
-    setTimeout(() => { loadingEl.style.display = 'none'; }, 1000); // 結果が見えるように1秒後に消す
+    setTimeout(() => { loadingEl.style.display = 'none'; }, 500);
 
     updateSelector('group-selector', groupSet, '全グループ表示'); updateSelector('store-selector', storeSet, '全店舗表示');
     document.getElementById("group-table-container").innerHTML = buildTable(gS, "グループ名", totalS);
@@ -135,9 +146,8 @@ function buildTable(sum, title, totalS) {
     const rowDef = [
         { sec: "予算・目標" }, 
         { lbl: "予算", m: "budget_j", type: "total_only", cls: "#ffffff" },
-        { lbl: "目標", m: "empty", cls: "#ffffff" }, 
         { lbl: "昨年実績", m: "empty", cls: "#ffffff" }, 
-        { lbl: "現時点予算", m: "empty", cls: "#ffffff" },
+        { lbl: "現時点予算", m: "budget_current", type: "total_only", cls: "#ffffff" },
         { sec: "基本実績" }, 
         { lbl: "実績", m: "j", cls: "#ffe599" }, 
         { lbl: "達成率", type: "total_ratio", n: "j", d: "budget_j", cls: "#ffffff" },
@@ -179,6 +189,10 @@ function renderCell(s, r, isT) {
     if(r.type === "total_only") {
         tVal = (s[r.m] || 0).toLocaleString();
         return "<td class='"+c+"' style='background-color:"+bg+"'><div class='cell-stack' style='align-items:center; font-weight:bold; font-size:12px; color:#444;'>" + tVal + "</div></td>";
+    }
+    else if(r.type === "total_only_money") {
+        tVal = (s[r.m] || 0).toLocaleString();
+        return "<td class='"+c+"' style='background-color:"+bg+"'><div class='cell-stack' style='align-items:center; font-weight:bold; font-size:12px; color:#444;'>¥" + tVal + "</div></td>";
     }
     else if(r.type === "total_ratio") {
         var actual = (s[r.n+"_k"] || 0) + (s[r.n+"_f"] || 0);
