@@ -1,5 +1,5 @@
 var allData = [];
-var budgetDataGlobal = null; // ★ 予算データを一時保存する箱
+var budgetDataGlobal = null; 
 var staffStatsMaster = {}, storeStatsMaster = {}, storeGroupMap = {}, staffStoreMap = {};
 var personMap = {};
 
@@ -19,7 +19,8 @@ async function fetchByCOQL() {
     allData = []; budgetDataGlobal = null;
     var loadingEl = document.getElementById('loading');
     loadingEl.style.display = 'block';
-    loadingEl.innerHTML = "実績データを取得中...";
+    loadingEl.style.textAlign = 'left';
+    loadingEl.innerHTML = "<b>【データ読み込み状況】</b><br>▶ 実績データを取得中...";
     
     const start = document.getElementById('start-date').value, end = document.getElementById('end-date').value;
     if(!start || !end) return;
@@ -32,7 +33,7 @@ async function fetchByCOQL() {
     } 
 
     await resolveMastersNames();
-    await fetchAnalyticsBudgets(); // ★ 実績のあとに予算を一気に取得！
+    await fetchAnalyticsBudgets(); // 予算の取得
     
     renderAll();
 }
@@ -41,7 +42,7 @@ async function resolveMastersNames() {
     var loadingEl = document.getElementById('loading');
     var ids = [...new Set(allData.map(r => r.ServicePerson ? r.ServicePerson.id : null).filter(id => id))];
     if (ids.length === 0) return;
-    loadingEl.innerHTML = "担当者名を一括照合中...";
+    loadingEl.innerHTML += "<br>▶ 担当者名を照合中...";
     await Promise.all(ids.map(async (id) => {
         if (!personMap[id]) {
             try { var res = await ZOHO.CRM.API.getRecord({ Entity: "Masters", RecordID: id }); if (res.data && res.data.length > 0) personMap[id] = res.data[0].Name || "名称未設定"; else personMap[id] = "ID:" + id; } catch (e) { personMap[id] = "ID:" + id; }
@@ -49,21 +50,28 @@ async function resolveMastersNames() {
     }));
 }
 
-// ★ 追加：Analyticsから予算を取得する関数
+// ★ エラー原因特定用：予算取得ロジック
 async function fetchAnalyticsBudgets() {
     var loadingEl = document.getElementById('loading');
-    loadingEl.innerHTML = "目標・予算データを取得中...";
+    loadingEl.innerHTML += "<br>▶ 目標・予算データを取得中...";
     try {
-        const res = await ZOHO.CRM.FUNCTIONS.execute("get_dashboard_budgets", {});
+        // SDKの仕様に合わせて引数を厳密に指定
+        const res = await ZOHO.CRM.FUNCTIONS.execute("get_dashboard_budgets", { arguments: JSON.stringify({}) });
+        
         if(res && res.details && res.details.output) {
             budgetDataGlobal = JSON.parse(res.details.output);
+            var len = budgetDataGlobal.sales_budget ? budgetDataGlobal.sales_budget.length : 0;
+            loadingEl.innerHTML += "<br><span style='color:green;'>✅ 予算データの受信に成功！（" + len + "件）</span>";
+        } else {
+            loadingEl.innerHTML += "<br><span style='color:orange;'>⚠️ 関数は動きましたが、返り値が空です（関数のAPI名を確認してください）</span>";
+            console.log("空のレスポンス:", res);
         }
     } catch(e) {
+        loadingEl.innerHTML += "<br><span style='color:red;'>❌ 関数の呼び出しに失敗しました</span>";
         console.error("予算データ取得エラー:", e);
     }
 }
 
-// ★ 追加：statsの箱に「budget_j (成約予算)」などを追加
 function createStats() { return { budget_j:0, budget_current:0, budget_ad:0, j_k:0, j_f:0, v_n_k:0, v_n_f:0, sho_k:0, sho_f:0, ab_k:0, ab_f:0, jk_k:0, jk_f:0, rv_k:0, rv_f:0, rj_k:0, rj_f:0, tot_v_k:0, tot_v_f:0, n_k:0, n_f:0, m_k:0, m_f:0, c_k:0, c_f:0, o2_k:0, o2_f:0, o3_k:0, o3_f:0, pk_k:0, pk_f:0, ct_k:0, ct_f:0, up_k:0, up_f:0, tp_k:0, tp_f:0, ic_k:0, ic_f:0, rst_k:0, rst_f:0, ni_k:0, ni_f:0, nu_k:0, nu_f:0, hp_k:0, hp_f:0, fl_k:0, fl_f:0, aq_k:0, aq_f:0, tr_k:0, tr_f:0, ln_k:0, ln_f:0, l84_k:0, l84_f:0, r69_k:0, r69_f:0, r59_k:0, r59_f:0, r49_k:0, r49_f:0, r39_k:0, r39_f:0, r29_k:0, r29_f:0, low_k:0, low_f:0, zn_k:0, zn_f:0, ar21_k:0, ar21_f:0, ar22_k:0, ar22_f:0, ar23_k:0, ar23_f:0, ar24_k:0, ar24_f:0, ar25_k:0, ar25_f:0, ar_cnt_k:0, ar_cnt_f:0, g_sls:0 }; }
 
 function aggregate(s, rec) {
@@ -75,10 +83,9 @@ function aggregate(s, rec) {
 }
 
 function renderAll() {
-    document.getElementById('loading').style.display = 'none';
+    var loadingEl = document.getElementById('loading');
     var gS = {}, totalS = createStats(); staffStatsMaster = {}; storeStatsMaster = {}; var groupSet = new Set(), storeSet = new Set();
     
-    // 実績データの集計
     if(allData && allData.length > 0) {
         allData.forEach(r => {
             var st = r.ServiceStore || "未所属", gr = storeToGroup[st] || "未所属";
@@ -89,15 +96,20 @@ function renderAll() {
         });
     }
 
-    // ★ 追加：予算データを各担当・店舗に割り振る（選択した月に絞り込み）
+    // 予算データの割り振り
+    var matchCount = 0;
     if(budgetDataGlobal && budgetDataGlobal.sales_budget) {
-        var selectedMonth = document.getElementById('month-selector').value.replace("-", "/"); // 例: 2026/04
+        var selectedMonth = document.getElementById('month-selector').value; // "2026-04"
+        var targetDateStr = selectedMonth.replace("-", "/"); // "2026/04"
+
         budgetDataGlobal.sales_budget.forEach(b => {
-            if(b["月"].startsWith(selectedMonth)) {
+            var d = b["月"] || "";
+            // 日付フォーマットの揺れに対応
+            if(d.includes(targetDateStr) || d.includes(selectedMonth)) {
+                matchCount++;
                 var st = b["店舗"], pr = b["担当者"], gr = storeToGroup[st] || "未所属";
                 var val = parseInt(b["成約台数予算"]) || 0;
                 
-                // 実績が0件で箱が無い人・店舗の場合、ここで箱を作る
                 if(!gS[gr]) gS[gr] = createStats(); if(!storeStatsMaster[st]) storeStatsMaster[st] = createStats(); if(!staffStatsMaster[pr]) staffStatsMaster[pr] = createStats();
                 storeGroupMap[st] = gr; staffStoreMap[pr] = st; groupSet.add(gr); storeSet.add(st);
                 
@@ -105,6 +117,10 @@ function renderAll() {
             }
         });
     }
+    
+    loadingEl.innerHTML += "<br>▶ 表を作成中... (当月の予算一致データ: " + matchCount + "件)";
+    
+    setTimeout(() => { loadingEl.style.display = 'none'; }, 1000); // 結果が見えるように1秒後に消す
 
     updateSelector('group-selector', groupSet, '全グループ表示'); updateSelector('store-selector', storeSet, '全店舗表示');
     document.getElementById("group-table-container").innerHTML = buildTable(gS, "グループ名", totalS);
@@ -121,16 +137,15 @@ function buildTable(sum, title, totalS) {
     for(var i=0; i<keys.length; i++) { h += "<th class='shop-header' style='position: sticky !important; z-index: 150 !important; top: 0;'>" + keys[i] + "</th>"; }
     h += "</tr></thead><tbody>";
 
-    // ★ 予算行と達成率行の指定を変更
     const rowDef = [
         { sec: "予算・目標" }, 
-        { lbl: "予算", m: "budget_j", type: "total_only", cls: "#ffffff" }, // ★ 予算は専用の1マス表示
+        { lbl: "予算", m: "budget_j", type: "total_only", cls: "#ffffff" },
         { lbl: "目標", m: "empty", cls: "#ffffff" }, 
         { lbl: "昨年実績", m: "empty", cls: "#ffffff" }, 
-        { lbl: "現時点予算", m: "empty", cls: "#ffffff" }, // （日次データは次回繋ぎます）
+        { lbl: "現時点予算", m: "empty", cls: "#ffffff" },
         { sec: "基本実績" }, 
         { lbl: "実績", m: "j", cls: "#ffe599" }, 
-        { lbl: "達成率", type: "total_ratio", n: "j", d: "budget_j", cls: "#ffffff" }, // ★ 予算に対する達成率！
+        { lbl: "達成率", type: "total_ratio", n: "j", d: "budget_j", cls: "#ffffff" },
         { lbl: "昨年実績(当日)", m: "empty", cls: "#d9d2e9" }, { lbl: "昨年対比", m: "empty", cls: "#d9d2e9" },
         { lbl: "新規接客数", m: "v_n", cls: "#ffffff" }, { lbl: "昨年接客数(当日)", m: "empty", cls: "#d9d2e9" }, { lbl: "商談件数", m: "sho", cls: "#ffffff" }, { lbl: "商談率", type: "ratio", n: "sho", d: "v_n", cls: "#ffe599" },
         { lbl: "AB数", m: "ab", cls: "#ffffff" }, { lbl: "AB率", type: "ratio", n: "ab", d: "sho", cls: "#ffffff" }, { lbl: "即決成約", m: "jk", cls: "#ffffff" }, { lbl: "即決率", type: "ratio", n: "jk", d: "v_n", cls: "#ffffff" },
@@ -166,16 +181,15 @@ function renderCell(s, r, isT) {
     var kVal = "-", fVal = "-", tVal = "-", bg = r.cls || "#ffffff", textClass = r.redText ? "force-red" : "";
     var c = isT ? "sticky-col-total " : "";
     
-    // ★ 予算や達成率を「真ん中に大きく1つだけ表示」する専用レンダリング
     if(r.type === "total_only") {
         tVal = (s[r.m] || 0).toLocaleString();
         return "<td class='"+c+"' style='background-color:"+bg+"'><div class='cell-stack' style='align-items:center; font-weight:bold; font-size:12px; color:#444;'>" + tVal + "</div></td>";
     }
     else if(r.type === "total_ratio") {
-        var actual = (s[r.n+"_k"] || 0) + (s[r.n+"_f"] || 0); // 実績合計
-        var budget = s[r.d] || 0; // 予算合計
+        var actual = (s[r.n+"_k"] || 0) + (s[r.n+"_f"] || 0);
+        var budget = s[r.d] || 0;
         tVal = budget > 0 ? Math.round((actual / budget) * 100) + "%" : "0%";
-        var ratioColor = (budget > 0 && (actual / budget) >= 1) ? "color: #d32f2f;" : "color: #333;"; // 100%超えで赤字に
+        var ratioColor = (budget > 0 && (actual / budget) >= 1) ? "color: #d32f2f;" : "color: #333;"; 
         return "<td class='"+c+"' style='background-color:"+bg+"'><div class='cell-stack' style='align-items:center; font-weight:bold; font-size:12px; " + ratioColor + "'>" + tVal + "</div></td>";
     }
 
