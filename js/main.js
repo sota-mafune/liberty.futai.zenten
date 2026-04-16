@@ -28,27 +28,25 @@ async function fetchByCOQL() {
     let page = 1, hasMore = true;
     while(hasMore) {
         const offset = (page - 1) * 200;
-        // ★ 修正：nousyayoteibi（納車予定日）を SELECT と WHERE に追加！
-        const coql = { "select_query": "select ClosingDay, VisitedDateTime, nousyayoteibi, SyaryouCategory, FOrR, Seated, Option1, ServiceStore, ServicePerson, cancel, HanbaiCategory, Option2, Option3, Option15, Option4, Option5, Option16, Option7, Option8, Option9, Option10, Option6, BackCamera, Option17, TradeinCar, PaymentCategory, arari16, arari17, Option14, arari21, arari22, arari23, arari24, arari25 from Services where ((ClosingDay between '" + start + "' and '" + end + "') or (VisitedDateTime between '" + start + "T00:00:00+09:00' and '" + end + "T23:59:59+09:00') or (nousyayoteibi between '" + start + "' and '" + end + "')) limit " + offset + ", 200" };
-        try { const res = await ZOHO.CRM.API.coql(coql); if (res.data) { allData = allData.concat(res.data); if (res.info && res.info.more_records) page++; else hasMore = false; } else hasMore = false; } catch (e) { hasMore = false; }
+        // ★ ServicePerson.Name を復活させ、もし nousyayoteibi が原因ならここでエラーが出るようにします
+        const coql = { "select_query": "select ClosingDay, VisitedDateTime, nousyayoteibi, SyaryouCategory, FOrR, Seated, Option1, ServiceStore, ServicePerson.Name, cancel, HanbaiCategory, Option2, Option3, Option15, Option4, Option5, Option16, Option7, Option8, Option9, Option10, Option6, BackCamera, Option17, TradeinCar, PaymentCategory, arari16, arari17, Option14, arari21, arari22, arari23, arari24, arari25 from Services where ((ClosingDay between '" + start + "' and '" + end + "') or (VisitedDateTime between '" + start + "T00:00:00+09:00' and '" + end + "T23:59:59+09:00') or (nousyayoteibi between '" + start + "' and '" + end + "')) limit " + offset + ", 200" };
+        try { 
+            const res = await ZOHO.CRM.API.coql(coql); 
+            if (res.data) { 
+                allData = allData.concat(res.data); 
+                if (res.info && res.info.more_records) page++; else hasMore = false; 
+            } else {
+                console.error("COQLエラーレスポンス:", res); // エラーならF12で確認可能
+                hasMore = false; 
+            }
+        } catch (e) { 
+            console.error("COQL例外発生:", e);
+            hasMore = false; 
+        }
     } 
 
-    await resolveMastersNames();
     await fetchAnalyticsBudgets();
-    
     renderAll();
-}
-
-async function resolveMastersNames() {
-    var loadingEl = document.getElementById('loading');
-    var ids = [...new Set(allData.map(r => r.ServicePerson ? r.ServicePerson.id : null).filter(id => id))];
-    if (ids.length === 0) return;
-    loadingEl.innerHTML += "<br>▶ 担当者名を照合中...";
-    await Promise.all(ids.map(async (id) => {
-        if (!personMap[id]) {
-            try { var res = await ZOHO.CRM.API.getRecord({ Entity: "Masters", RecordID: id }); if (res.data && res.data.length > 0) personMap[id] = res.data[0].Name || "名称未設定"; else personMap[id] = "ID:" + id; } catch (e) { personMap[id] = "ID:" + id; }
-        }
-    }));
 }
 
 async function fetchAnalyticsBudgets() {
@@ -91,62 +89,52 @@ function aggregate(s, rec) {
 }
 
 function renderAll() {
-    var loadingEl = document.getElementById('loading');
+    document.getElementById('loading').style.display = 'none';
     var gS = {}, totalS = createStats(); staffStatsMaster = {}; storeStatsMaster = {}; var groupSet = new Set(), storeSet = new Set();
     
+    // 1. 実績の集計
     if(allData && allData.length > 0) {
         allData.forEach(r => {
             var st = r.ServiceStore || "未所属", gr = storeToGroup[st] || "未所属";
-            var pr = "未設定"; if (r.ServicePerson && r.ServicePerson.id) pr = personMap[r.ServicePerson.id] || "ID:" + r.ServicePerson.id;
+            var pr = (r.ServicePerson && r.ServicePerson.Name) ? r.ServicePerson.Name : "未設定";
             if(!gS[gr]) gS[gr] = createStats(); if(!storeStatsMaster[st]) storeStatsMaster[st] = createStats(); if(!staffStatsMaster[pr]) staffStatsMaster[pr] = createStats();
             storeGroupMap[st] = gr; staffStoreMap[pr] = st; groupSet.add(gr); storeSet.add(st);
             [gS[gr], storeStatsMaster[st], staffStatsMaster[pr], totalS].forEach(s => aggregate(s, r));
         });
     }
 
+    // 2. 予算の集計
     if(budgetDataGlobal) {
         var selectedMonth = document.getElementById('month-selector').value; 
         var targetDateStr = selectedMonth.replace("-", "/"); 
         var endDateStr = document.getElementById('end-date').value.replace(/-/g, "/"); 
-
-        // 1. 売上予算（成約台数、納車、粗利）
         if(budgetDataGlobal.sales_budget) {
             budgetDataGlobal.sales_budget.forEach(b => {
                 var d = b["月"] || "";
                 if(d.includes(targetDateStr) || d.includes(selectedMonth)) {
                     var st = b["店舗"], pr = b["担当者"], gr = storeToGroup[st] || "未所属";
-                    var val_j = parseInt(b["成約台数予算"]) || 0;
-                    var val_del = parseInt(b["納車予算"]) || 0; // ★納車予算
-                    var val_arari = parseInt((b["粗利予算"]||"").toString().replace(/[^0-9]/g, '')) || 0; // ★粗利予算
-                    
                     if(!gS[gr]) gS[gr] = createStats(); if(!storeStatsMaster[st]) storeStatsMaster[st] = createStats(); if(!staffStatsMaster[pr]) staffStatsMaster[pr] = createStats();
                     storeGroupMap[st] = gr; staffStoreMap[pr] = st; groupSet.add(gr); storeSet.add(st);
-                    
-                    gS[gr].budget_j += val_j; storeStatsMaster[st].budget_j += val_j; staffStatsMaster[pr].budget_j += val_j; totalS.budget_j += val_j;
-                    gS[gr].budget_del += val_del; storeStatsMaster[st].budget_del += val_del; staffStatsMaster[pr].budget_del += val_del; totalS.budget_del += val_del;
-                    gS[gr].budget_arari += val_arari; storeStatsMaster[st].budget_arari += val_arari; staffStatsMaster[pr].budget_arari += val_arari; totalS.budget_arari += val_arari;
+                    gS[gr].budget_j += parseInt(b["成約台数予算"])||0; storeStatsMaster[st].budget_j += parseInt(b["成約台数予算"])||0; staffStatsMaster[pr].budget_j += parseInt(b["成約台数予算"])||0; totalS.budget_j += parseInt(b["成約台数予算"])||0;
+                    gS[gr].budget_del += parseInt(b["納車予算"])||0; storeStatsMaster[st].budget_del += parseInt(b["納車予算"])||0; staffStatsMaster[pr].budget_del += parseInt(b["納車予算"])||0; totalS.budget_del += parseInt(b["納車予算"])||0;
+                    var arBudget = parseInt((b["粗利予算"]||"0").toString().replace(/[^0-9]/g, ''))||0;
+                    gS[gr].budget_arari += arBudget; storeStatsMaster[st].budget_arari += arBudget; staffStatsMaster[pr].budget_arari += arBudget; totalS.budget_arari += arBudget;
                 }
             });
         }
-
-        // 2. 日次販売予算
         if(budgetDataGlobal.daily_budget) {
             budgetDataGlobal.daily_budget.forEach(b => {
                 var d = (b["日"] || "").replace(/-/g, "/"); 
                 if(d.startsWith(targetDateStr) && d <= endDateStr) {
                     var st = b["店舗"], gr = storeToGroup[st] || "未所属";
-                    var val_cur = parseInt(b["成約台数予算"]) || 0;
-                    
                     if(!gS[gr]) gS[gr] = createStats(); if(!storeStatsMaster[st]) storeStatsMaster[st] = createStats();
                     storeGroupMap[st] = gr; groupSet.add(gr); storeSet.add(st);
-                    
-                    gS[gr].budget_current += val_cur; storeStatsMaster[st].budget_current += val_cur; totalS.budget_current += val_cur;
+                    var dVal = parseInt(b["成約台数予算"])||0;
+                    gS[gr].budget_current += dVal; storeStatsMaster[st].budget_current += dVal; totalS.budget_current += dVal;
                 }
             });
         }
     }
-    
-    setTimeout(() => { loadingEl.style.display = 'none'; }, 500);
 
     updateSelector('group-selector', groupSet, '全グループ表示'); updateSelector('store-selector', storeSet, '全店舗表示');
     document.getElementById("group-table-container").innerHTML = buildTable(gS, "グループ名", totalS);
