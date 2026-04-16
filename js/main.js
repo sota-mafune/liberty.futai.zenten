@@ -1,5 +1,7 @@
 var allData = [];
+var budgetDataGlobal = null; // ★ 予算データを一時保存する箱
 var staffStatsMaster = {}, storeStatsMaster = {}, storeGroupMap = {}, staffStoreMap = {};
+var personMap = {};
 
 var storeToGroup = { "神戸店":"兵四", "久米窪田店":"兵四", "高知高須店":"兵四", "北久米店":"兵四", "尼崎店":"兵四", "高槻店":"大阪", "八尾店":"大阪", "堺大泉緑地前店":"大阪", "松原天美店":"大阪", "貝塚店":"大阪", "大津店":"滋三", "栗東店":"滋三", "彦根店":"滋三", "津店":"滋三", "松阪店":"滋三", "鯖江店":"滋三", "久御山店":"京奈", "171店":"京奈", "精華店":"京奈", "西大和店":"京奈", "橿原店":"京奈", "熊本インター店":"旧Dj", "長田店":"旧Dj", "outlet店":"旧Dj", "舞鶴店":"旧Dj", "福知山店":"旧Dj", "加古川店":"旧Dj", "BYD滋賀":"未所属" };
 
@@ -14,8 +16,10 @@ function setInitialDates() { var now = new Date(); var y = now.getFullYear(), m 
 function syncMonthToCalendar() { var v = document.getElementById('month-selector').value, p = v.split("-").map(Number), l = new Date(p[0], p[1], 0).getDate(); document.getElementById('start-date').value = v + "-01"; document.getElementById('end-date').value = v + "-" + l; fetchByCOQL(); }
 
 async function fetchByCOQL() {
-    allData = []; 
-    document.getElementById('loading').style.display = 'block';
+    allData = []; budgetDataGlobal = null;
+    var loadingEl = document.getElementById('loading');
+    loadingEl.style.display = 'block';
+    loadingEl.innerHTML = "実績データを取得中...";
     
     const start = document.getElementById('start-date').value, end = document.getElementById('end-date').value;
     if(!start || !end) return;
@@ -23,22 +27,44 @@ async function fetchByCOQL() {
     let page = 1, hasMore = true;
     while(hasMore) {
         const offset = (page - 1) * 200;
-        // ★ ServicePerson.Name を直指定した爆速クエリ
-        const coql = { "select_query": "select ClosingDay, VisitedDateTime, SyaryouCategory, FOrR, Seated, Option1, ServiceStore, ServicePerson.Name, cancel, HanbaiCategory, Option2, Option3, Option15, Option4, Option5, Option16, Option7, Option8, Option9, Option10, Option6, BackCamera, Option17, TradeinCar, PaymentCategory, arari16, arari17, Option14, arari21, arari22, arari23, arari24, arari25 from Services where ((ClosingDay between '" + start + "' and '" + end + "') or (VisitedDateTime between '" + start + "T00:00:00+09:00' and '" + end + "T23:59:59+09:00')) limit " + offset + ", 200" };
-        
-        try { 
-            const res = await ZOHO.CRM.API.coql(coql); 
-            if (res.data) { 
-                allData = allData.concat(res.data); 
-                if (res.info && res.info.more_records) page++; else hasMore = false; 
-            } else hasMore = false; 
-        } catch (e) { hasMore = false; }
+        const coql = { "select_query": "select ClosingDay, VisitedDateTime, SyaryouCategory, FOrR, Seated, Option1, ServiceStore, ServicePerson, cancel, HanbaiCategory, Option2, Option3, Option15, Option4, Option5, Option16, Option7, Option8, Option9, Option10, Option6, BackCamera, Option17, TradeinCar, PaymentCategory, arari16, arari17, Option14, arari21, arari22, arari23, arari24, arari25 from Services where ((ClosingDay between '" + start + "' and '" + end + "') or (VisitedDateTime between '" + start + "T00:00:00+09:00' and '" + end + "T23:59:59+09:00')) limit " + offset + ", 200" };
+        try { const res = await ZOHO.CRM.API.coql(coql); if (res.data) { allData = allData.concat(res.data); if (res.info && res.info.more_records) page++; else hasMore = false; } else hasMore = false; } catch (e) { hasMore = false; }
     } 
 
+    await resolveMastersNames();
+    await fetchAnalyticsBudgets(); // ★ 実績のあとに予算を一気に取得！
+    
     renderAll();
 }
 
-function createStats() { return { j_k:0, j_f:0, v_n_k:0, v_n_f:0, sho_k:0, sho_f:0, ab_k:0, ab_f:0, jk_k:0, jk_f:0, rv_k:0, rv_f:0, rj_k:0, rj_f:0, tot_v_k:0, tot_v_f:0, n_k:0, n_f:0, m_k:0, m_f:0, c_k:0, c_f:0, o2_k:0, o2_f:0, o3_k:0, o3_f:0, pk_k:0, pk_f:0, ct_k:0, ct_f:0, up_k:0, up_f:0, tp_k:0, tp_f:0, ic_k:0, ic_f:0, rst_k:0, rst_f:0, ni_k:0, ni_f:0, nu_k:0, nu_f:0, hp_k:0, hp_f:0, fl_k:0, fl_f:0, aq_k:0, aq_f:0, tr_k:0, tr_f:0, ln_k:0, ln_f:0, l84_k:0, l84_f:0, r69_k:0, r69_f:0, r59_k:0, r59_f:0, r49_k:0, r49_f:0, r39_k:0, r39_f:0, r29_k:0, r29_f:0, low_k:0, low_f:0, zn_k:0, zn_f:0, ar21_k:0, ar21_f:0, ar22_k:0, ar22_f:0, ar23_k:0, ar23_f:0, ar24_k:0, ar24_f:0, ar25_k:0, ar25_f:0, ar_cnt_k:0, ar_cnt_f:0, g_sls:0 }; }
+async function resolveMastersNames() {
+    var loadingEl = document.getElementById('loading');
+    var ids = [...new Set(allData.map(r => r.ServicePerson ? r.ServicePerson.id : null).filter(id => id))];
+    if (ids.length === 0) return;
+    loadingEl.innerHTML = "担当者名を一括照合中...";
+    await Promise.all(ids.map(async (id) => {
+        if (!personMap[id]) {
+            try { var res = await ZOHO.CRM.API.getRecord({ Entity: "Masters", RecordID: id }); if (res.data && res.data.length > 0) personMap[id] = res.data[0].Name || "名称未設定"; else personMap[id] = "ID:" + id; } catch (e) { personMap[id] = "ID:" + id; }
+        }
+    }));
+}
+
+// ★ 追加：Analyticsから予算を取得する関数
+async function fetchAnalyticsBudgets() {
+    var loadingEl = document.getElementById('loading');
+    loadingEl.innerHTML = "目標・予算データを取得中...";
+    try {
+        const res = await ZOHO.CRM.FUNCTIONS.execute("get_dashboard_budgets", {});
+        if(res && res.details && res.details.output) {
+            budgetDataGlobal = JSON.parse(res.details.output);
+        }
+    } catch(e) {
+        console.error("予算データ取得エラー:", e);
+    }
+}
+
+// ★ 追加：statsの箱に「budget_j (成約予算)」などを追加
+function createStats() { return { budget_j:0, budget_current:0, budget_ad:0, j_k:0, j_f:0, v_n_k:0, v_n_f:0, sho_k:0, sho_f:0, ab_k:0, ab_f:0, jk_k:0, jk_f:0, rv_k:0, rv_f:0, rj_k:0, rj_f:0, tot_v_k:0, tot_v_f:0, n_k:0, n_f:0, m_k:0, m_f:0, c_k:0, c_f:0, o2_k:0, o2_f:0, o3_k:0, o3_f:0, pk_k:0, pk_f:0, ct_k:0, ct_f:0, up_k:0, up_f:0, tp_k:0, tp_f:0, ic_k:0, ic_f:0, rst_k:0, rst_f:0, ni_k:0, ni_f:0, nu_k:0, nu_f:0, hp_k:0, hp_f:0, fl_k:0, fl_f:0, aq_k:0, aq_f:0, tr_k:0, tr_f:0, ln_k:0, ln_f:0, l84_k:0, l84_f:0, r69_k:0, r69_f:0, r59_k:0, r59_f:0, r49_k:0, r49_f:0, r39_k:0, r39_f:0, r29_k:0, r29_f:0, low_k:0, low_f:0, zn_k:0, zn_f:0, ar21_k:0, ar21_f:0, ar22_k:0, ar22_f:0, ar23_k:0, ar23_f:0, ar24_k:0, ar24_f:0, ar25_k:0, ar25_f:0, ar_cnt_k:0, ar_cnt_f:0, g_sls:0 }; }
 
 function aggregate(s, rec) {
     var c = (rec.SyaryouCategory === "軽" || rec.SyaryouCategory === "軽自動車") ? "k" : "f";
@@ -52,20 +78,33 @@ function renderAll() {
     document.getElementById('loading').style.display = 'none';
     var gS = {}, totalS = createStats(); staffStatsMaster = {}; storeStatsMaster = {}; var groupSet = new Set(), storeSet = new Set();
     
-    if(!allData || allData.length === 0) {
-        document.getElementById("group-table-container").innerHTML = "<p style='padding:20px;'>データがありません。</p>";
-        return;
+    // 実績データの集計
+    if(allData && allData.length > 0) {
+        allData.forEach(r => {
+            var st = r.ServiceStore || "未所属", gr = storeToGroup[st] || "未所属";
+            var pr = "未設定"; if (r.ServicePerson && r.ServicePerson.id) pr = personMap[r.ServicePerson.id] || "ID:" + r.ServicePerson.id;
+            if(!gS[gr]) gS[gr] = createStats(); if(!storeStatsMaster[st]) storeStatsMaster[st] = createStats(); if(!staffStatsMaster[pr]) staffStatsMaster[pr] = createStats();
+            storeGroupMap[st] = gr; staffStoreMap[pr] = st; groupSet.add(gr); storeSet.add(st);
+            [gS[gr], storeStatsMaster[st], staffStatsMaster[pr], totalS].forEach(s => aggregate(s, r));
+        });
     }
 
-    allData.forEach(r => {
-        var st = r.ServiceStore || "未所属", gr = storeToGroup[st] || "未所属";
-        // ★ ここで "ServicePerson.Name" という文字列キーを直接引き出します
-        var pr = r["ServicePerson.Name"] || "未設定";
-
-        if(!gS[gr]) gS[gr] = createStats(); if(!storeStatsMaster[st]) storeStatsMaster[st] = createStats(); if(!staffStatsMaster[pr]) staffStatsMaster[pr] = createStats();
-        storeGroupMap[st] = gr; staffStoreMap[pr] = st; groupSet.add(gr); storeSet.add(st);
-        [gS[gr], storeStatsMaster[st], staffStatsMaster[pr], totalS].forEach(s => aggregate(s, r));
-    });
+    // ★ 追加：予算データを各担当・店舗に割り振る（選択した月に絞り込み）
+    if(budgetDataGlobal && budgetDataGlobal.sales_budget) {
+        var selectedMonth = document.getElementById('month-selector').value.replace("-", "/"); // 例: 2026/04
+        budgetDataGlobal.sales_budget.forEach(b => {
+            if(b["月"].startsWith(selectedMonth)) {
+                var st = b["店舗"], pr = b["担当者"], gr = storeToGroup[st] || "未所属";
+                var val = parseInt(b["成約台数予算"]) || 0;
+                
+                // 実績が0件で箱が無い人・店舗の場合、ここで箱を作る
+                if(!gS[gr]) gS[gr] = createStats(); if(!storeStatsMaster[st]) storeStatsMaster[st] = createStats(); if(!staffStatsMaster[pr]) staffStatsMaster[pr] = createStats();
+                storeGroupMap[st] = gr; staffStoreMap[pr] = st; groupSet.add(gr); storeSet.add(st);
+                
+                gS[gr].budget_j += val; storeStatsMaster[st].budget_j += val; staffStatsMaster[pr].budget_j += val; totalS.budget_j += val;
+            }
+        });
+    }
 
     updateSelector('group-selector', groupSet, '全グループ表示'); updateSelector('store-selector', storeSet, '全店舗表示');
     document.getElementById("group-table-container").innerHTML = buildTable(gS, "グループ名", totalS);
@@ -82,10 +121,17 @@ function buildTable(sum, title, totalS) {
     for(var i=0; i<keys.length; i++) { h += "<th class='shop-header' style='position: sticky !important; z-index: 150 !important; top: 0;'>" + keys[i] + "</th>"; }
     h += "</tr></thead><tbody>";
 
-    // ★ お気に入りの「色指定（cls: '#...'）」
+    // ★ 予算行と達成率行の指定を変更
     const rowDef = [
-        { sec: "予算・目標" }, { lbl: "予算", m: "empty", cls: "#ffffff" }, { lbl: "目標", m: "empty", cls: "#ffffff" }, { lbl: "昨年実績", m: "empty", cls: "#ffffff" }, { lbl: "現時点予算", m: "empty", cls: "#ffffff" },
-        { sec: "基本実績" }, { lbl: "実績", m: "j", cls: "#ffe599" }, { lbl: "達成率", type: "ratio", n: "j", d: "g_sls", cls: "#ffffff" }, { lbl: "昨年実績(当日)", m: "empty", cls: "#d9d2e9" }, { lbl: "昨年対比", m: "empty", cls: "#d9d2e9" },
+        { sec: "予算・目標" }, 
+        { lbl: "予算", m: "budget_j", type: "total_only", cls: "#ffffff" }, // ★ 予算は専用の1マス表示
+        { lbl: "目標", m: "empty", cls: "#ffffff" }, 
+        { lbl: "昨年実績", m: "empty", cls: "#ffffff" }, 
+        { lbl: "現時点予算", m: "empty", cls: "#ffffff" }, // （日次データは次回繋ぎます）
+        { sec: "基本実績" }, 
+        { lbl: "実績", m: "j", cls: "#ffe599" }, 
+        { lbl: "達成率", type: "total_ratio", n: "j", d: "budget_j", cls: "#ffffff" }, // ★ 予算に対する達成率！
+        { lbl: "昨年実績(当日)", m: "empty", cls: "#d9d2e9" }, { lbl: "昨年対比", m: "empty", cls: "#d9d2e9" },
         { lbl: "新規接客数", m: "v_n", cls: "#ffffff" }, { lbl: "昨年接客数(当日)", m: "empty", cls: "#d9d2e9" }, { lbl: "商談件数", m: "sho", cls: "#ffffff" }, { lbl: "商談率", type: "ratio", n: "sho", d: "v_n", cls: "#ffe599" },
         { lbl: "AB数", m: "ab", cls: "#ffffff" }, { lbl: "AB率", type: "ratio", n: "ab", d: "sho", cls: "#ffffff" }, { lbl: "即決成約", m: "jk", cls: "#ffffff" }, { lbl: "即決率", type: "ratio", n: "jk", d: "v_n", cls: "#ffffff" },
         { lbl: "成約率", type: "ratio", n: "j", d: "v_n", cls: "#ffe599", redText: true }, { lbl: "昨年成約率", m: "empty", cls: "#d9d2e9" },
@@ -103,20 +149,13 @@ function buildTable(sum, title, totalS) {
     for(var j=0; j<rowDef.length; j++){ 
         var r = rowDef[j]; 
         if(r.sec) {
-            h += "<tr>";
-            h += "<td class='sticky-col-item section-row' style='position: sticky !important; z-index: 180 !important; left: 0; border-right: none;'>" + r.sec + "</td>";
-            h += "<td class='sticky-col-total section-row' style='position: sticky !important; z-index: 170 !important; left: 170px; border-left: none;'></td>";
-            if (keys.length > 0) {
-                h += "<td colspan='" + keys.length + "' class='section-row' style='position: static; z-index: 1; border-left: none;'></td>";
-            }
+            h += "<tr><td class='sticky-col-item section-row' style='position: sticky !important; z-index: 180 !important; left: 0; border-right: none;'>" + r.sec + "</td><td class='sticky-col-total section-row' style='position: sticky !important; z-index: 170 !important; left: 170px; border-left: none;'></td>";
+            if (keys.length > 0) h += "<td colspan='" + keys.length + "' class='section-row' style='position: static; z-index: 1; border-left: none;'></td>";
             h += "</tr>";
-        }
-        else {
+        } else {
             h += "<tr><td class='sticky-col-item' style='background-color:"+(r.cls||"#fff")+"'>"+r.lbl+"</td>";
             h += renderCell(totalS, r, true); 
-            for(var k=0; k<keys.length; k++) {
-                h += renderCell(sum[keys[k]], r, false);
-            }
+            for(var k=0; k<keys.length; k++) h += renderCell(sum[keys[k]], r, false);
             h += "</tr>";
         }
     }
@@ -127,6 +166,19 @@ function renderCell(s, r, isT) {
     var kVal = "-", fVal = "-", tVal = "-", bg = r.cls || "#ffffff", textClass = r.redText ? "force-red" : "";
     var c = isT ? "sticky-col-total " : "";
     
+    // ★ 予算や達成率を「真ん中に大きく1つだけ表示」する専用レンダリング
+    if(r.type === "total_only") {
+        tVal = (s[r.m] || 0).toLocaleString();
+        return "<td class='"+c+"' style='background-color:"+bg+"'><div class='cell-stack' style='align-items:center; font-weight:bold; font-size:12px; color:#444;'>" + tVal + "</div></td>";
+    }
+    else if(r.type === "total_ratio") {
+        var actual = (s[r.n+"_k"] || 0) + (s[r.n+"_f"] || 0); // 実績合計
+        var budget = s[r.d] || 0; // 予算合計
+        tVal = budget > 0 ? Math.round((actual / budget) * 100) + "%" : "0%";
+        var ratioColor = (budget > 0 && (actual / budget) >= 1) ? "color: #d32f2f;" : "color: #333;"; // 100%超えで赤字に
+        return "<td class='"+c+"' style='background-color:"+bg+"'><div class='cell-stack' style='align-items:center; font-weight:bold; font-size:12px; " + ratioColor + "'>" + tVal + "</div></td>";
+    }
+
     if(r.m === "empty") { return "<td class='"+c+"' style='background-color:"+bg+"'><div class='cell-stack'><div class='stack-upper' style='display:flex;'><div class='val-kei'>-</div><div class='val-fu'>-</div></div><div class='stack-lower'>-</div></div></td>"; }
     else if(r.type && r.type.startsWith("arari")) {
         if(r.type === "arari_val") { kVal = s.j_k; fVal = s.j_f; tVal = kVal + fVal; }
@@ -149,16 +201,6 @@ function renderCell(s, r, isT) {
     }
 }
 
-function showPage(id) { 
-    document.querySelectorAll('.page-content').forEach(function(p){ p.classList.remove('active'); }); 
-    document.getElementById(id).classList.add('active'); 
-    document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); });
-    var btnId = 'btn-' + id.replace('-page', '');
-    var btn = document.getElementById(btnId);
-    if(btn) btn.classList.add('active');
-    document.getElementById('group-filter-area').style.display = (id === 'store-page') ? 'flex' : 'none'; 
-    document.getElementById('staff-filter-area').style.display = (id === 'staff-page') ? 'flex' : 'none'; 
-}
-
+function showPage(id) { document.querySelectorAll('.page-content').forEach(function(p){ p.classList.remove('active'); }); document.getElementById(id).classList.add('active'); document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); }); var btnId = 'btn-' + id.replace('-page', ''); var btn = document.getElementById(btnId); if(btn) btn.classList.add('active'); document.getElementById('group-filter-area').style.display = (id === 'store-page') ? 'flex' : 'none'; document.getElementById('staff-filter-area').style.display = (id === 'staff-page') ? 'flex' : 'none'; }
 function filterStoreByGroup() { var g = document.getElementById('group-selector').value, f = {}, t = createStats(); Object.keys(storeStatsMaster).forEach(function(st){ if (g === "all" || storeGroupMap[st] === g) { f[st] = storeStatsMaster[st]; Object.keys(t).forEach(function(k){ if(typeof t[k] === 'number') t[k] += storeStatsMaster[st][k]; }); } }); document.getElementById("store-table-container").innerHTML = buildTable(f, "店舗名", t); }
 function filterStaffByStore() { var s = document.getElementById('store-selector').value, f = {}, t = createStats(); Object.keys(staffStatsMaster).forEach(function(n){ if (s === "all" || staffStoreMap[n] === s) { f[n] = staffStatsMaster[n]; Object.keys(t).forEach(function(k){ if(typeof t[k] === 'number') t[k] += staffStatsMaster[n][k]; }); } }); document.getElementById("staff-table-container").innerHTML = buildTable(f, "担当者名", t); }
