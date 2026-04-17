@@ -121,7 +121,7 @@ function updateSelector(id, set, def) { var sel = document.getElementById(id); s
 
 function buildTable(sum, title, totalS) {
     var keys = Object.keys(sum).sort();
-    var h = "<table><thead><tr><th class='sticky-col-item shop-header' style='position: sticky !important; z-index: 300 !important; top: 0; left: 0;'>" + (title || "KPI項目") + "</th><th class='sticky-col-total shop-header' style='position: sticky !important; z-index: 290 !important; top: 0; left: 170px;'>合計</th>";
+    var h = "<table><thead><tr><th class='sticky-col-item shop-header' style='position: sticky !important; z-index: 300 !important; top: 0; left: 0;'>" + (title || "KPI項目") + "</th><th class='sticky-col-total shop-header' style='position: sticky !important; z-index: 290 !important; top: 0; left: 180px;'>合計</th>";
     for(var i=0; i<keys.length; i++) { h += "<th class='shop-header' style='position: sticky !important; z-index: 150 !important; top: 0;'>" + keys[i] + "</th>"; }
     h += "</tr></thead><tbody>";
     const rowDef = [
@@ -146,7 +146,7 @@ function buildTable(sum, title, totalS) {
     ];
     for(var j=0; j<rowDef.length; j++){ 
         var r = rowDef[j]; 
-        if(r.sec) { h += "<tr><td class='sticky-col-item section-row' style='position: sticky !important; z-index: 180 !important; left: 0; border-right: none;'>" + r.sec + "</td><td class='sticky-col-total section-row' style='position: sticky !important; z-index: 170 !important; left: 170px; border-left: none;'></td><td colspan='" + keys.length + "' class='section-row' style='position: static; z-index: 1; border-left: none;'></td></tr>"; } 
+        if(r.sec) { h += "<tr><td class='sticky-col-item section-row' style='position: sticky !important; z-index: 180 !important; left: 0; border-right: none;'>" + r.sec + "</td><td class='sticky-col-total section-row' style='position: sticky !important; z-index: 170 !important; left: 180px; border-left: none;'></td><td colspan='" + keys.length + "' class='section-row' style='position: static; z-index: 1; border-left: none;'></td></tr>"; } 
         else { h += "<tr><td class='sticky-col-item' style='background-color:"+(r.cls||"#fff")+"'>"+r.lbl+"</td>" + renderCell(totalS, r, true); for(var k=0; k<keys.length; k++) h += renderCell(sum[keys[k]], r, false); h += "</tr>"; }
     }
     return h + "</tbody></table>";
