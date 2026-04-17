@@ -12,44 +12,44 @@ select { padding: 3px 8px; border-radius: 4px; border: 1px solid #999; font-size
 table { border-collapse: separate; border-spacing: 0; width: max-content; background: white; table-layout: fixed !important; }
 
 /* 全てのセルに強制的に幅を指定 */
-th, td { 
-    border: 1px solid #d9d9d9; 
-    padding: 0; 
-    text-align: center; 
-    white-space: nowrap; 
-    width: 115px !important; 
-    min-width: 115px !important; 
-    max-width: 115px !important; 
-    box-sizing: border-box; 
-    overflow: hidden; 
+th, td { 
+    border: 1px solid #d9d9d9; 
+    padding: 0; 
+    text-align: center; 
+    white-space: nowrap; 
+    width: 100px !important; 
+    min-width: 100px !important; 
+    max-width: 100px !important; 
+    box-sizing: border-box; 
+    overflow: hidden; 
 }
 
 /* 1列目：項目名固定 */
-.sticky-col-item { 
-    position: sticky !important; 
-    left: 0 !important; 
-    background-color: #f2f2f2; 
-    font-weight: bold; 
-    z-index: 110 !important; 
-    border-right: 2px solid #444 !important; 
-    width: 160px !important; 
-    min-width: 160px !important; 
-    max-width: 160px !important; 
-    text-align: left; 
-    padding-left: 5px; 
+.sticky-col-item { 
+    position: sticky !important; 
+    left: 0 !important; 
+    background-color: #f2f2f2; 
+    font-weight: bold; 
+    z-index: 110 !important; 
+    border-right: 2px solid #444 !important; 
+    width: 170px !important; 
+    min-width: 170px !important; 
+    max-width: 170px !important; 
+    text-align: left; 
+    padding-left: 5px; 
 }
 
 /* 2列目：合計列固定 */
-.sticky-col-total { 
-    position: sticky !important; 
-    left: 170px !important; 
-    background-color: #fff9e6; 
-    font-weight: bold; 
-    z-index: 100 !important; 
-    border-right: 2px solid #444 !important; 
-    width: 115px !important; 
-    min-width: 115px !important; 
-    max-width: 115px !important; 
+.sticky-col-total { 
+    position: sticky !important; 
+    left: 170px !important; 
+    background-color: #fff9e6; 
+    font-weight: bold; 
+    z-index: 100 !important; 
+    border-right: 2px solid #444 !important; 
+    width: 105px !important; 
+    min-width: 105px !important; 
+    max-width: 105px !important; 
 }
 
 .shop-header { background-color: #44546a; color: white; height: 35px; position: sticky; top: 0; z-index: 150; }
@@ -68,15 +68,3 @@ th, td { 
 .force-red { color: #ff0000 !important; }
 #loading { padding: 20px; color: #e67e22; font-weight: bold; }
 .page-content { display: none; } .page-content.active { display: block; }
-
-/* ★ここから追加：JSから色を指定するためのクラス */
-.bg-white { background-color: #ffffff !important; }
-.bg-yellow { background-color: #ffe599 !important; }
-.bg-purple { background-color: #d9d2e9 !important; }
-.bg-red-light { background-color: #f4cccc !important; }
-.bg-green { background-color: #b6d7a8 !important; }
-.bg-cyan { background-color: #a2c4c9 !important; }
-.bg-blue { background-color: #a4c2f4 !important; }
-.bg-pink { background-color: #ead1dc !important; }
-/* 納車セクション専用：最優先で薄緑を適用 */
-.bg-del-green { background-color: #d9ead3 !important; }
