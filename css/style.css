@@ -78,3 +78,5 @@ th, td {
 .bg-cyan { background-color: #a2c4c9 !important; }
 .bg-blue { background-color: #a4c2f4 !important; }
 .bg-pink { background-color: #ead1dc !important; }
+/* 納車セクション専用：最優先で薄緑を適用 */
+.bg-del-green { background-color: #d9ead3 !important; }
