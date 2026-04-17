@@ -166,7 +166,7 @@ function buildTable(sum, title, totalS) {
     for(var i=0; i<keys.length; i++) { h += "<th class='shop-header' style='position: sticky !important; z-index: 150 !important; top: 0;'>" + keys[i] + "</th>"; }
     h += "</tr></thead><tbody>";
 
-    const rowDef = [
+const rowDef = [
         { sec: "予算・目標" }, 
         { lbl: "予算", m: "budget_j", type: "total_only", cls: "#ffffff" },
         { lbl: "昨年実績", m: "empty", cls: "#ffffff" }, 
@@ -175,23 +175,18 @@ function buildTable(sum, title, totalS) {
         { lbl: "実績", m: "j", cls: "#ffe599" }, 
         { lbl: "達成率", type: "total_ratio", n: "j", d: "budget_j", cls: "#ffffff" },
         { lbl: "昨年実績(当日)", m: "empty", cls: "#d9d2e9" }, { lbl: "昨年対比", m: "empty", cls: "#d9d2e9" },
-        { lbl: "新規接客数", m: "v_n", cls: "#ffffff" }, { lbl: "商談件数", m: "sho", cls: "#ffffff" }, { lbl: "商談率", type: "ratio", n: "sho", d: "v_n", cls: "#ffe599" },
+        { lbl: "新規接客数", m: "v_n", cls: "#ffffff" }, { lbl: "昨年接客数(当日)", m: "empty", cls: "#d9d2e9" }, { lbl: "商談件数", m: "sho", cls: "#ffffff" }, { lbl: "商談率", type: "ratio", n: "sho", d: "v_n", cls: "#ffe599" },
         { lbl: "AB数", m: "ab", cls: "#ffffff" }, { lbl: "AB率", type: "ratio", n: "ab", d: "sho", cls: "#ffffff" }, { lbl: "即決成約", m: "jk", cls: "#ffffff" }, { lbl: "即決率", type: "ratio", n: "jk", d: "v_n", cls: "#ffffff" },
-        { lbl: "成約率", type: "ratio", n: "j", d: "v_n", cls: "#ffe599", redText: true },
-        { lbl: "再来接客数", m: "rv", cls: "#ffffff" }, { lbl: "再来成約", m: "rj", cls: "#ffffff" }, { lbl: "総接客数", m: "tot_v", cls: "#ffffff" },
-        { sec: "販売区分" }, { lbl: "新車", m: "n", cls: "#b6d7a8" }, { lbl: "未使用車", m: "m", cls: "#b6d7a8" }, { lbl: "中古車", m: "c", cls: "#b6d7a8" },
-        { sec: "付帯品個別" }, { lbl: "10年保証", m: "o2", cls: "#a2c4c9" }, { lbl: "中古保証", m: "o3", cls: "#a2c4c9" }, { lbl: "パック", m: "pk", cls: "#a2c4c9" }, { lbl: "コーティング", m: "ct", cls: "#a2c4c9" }, { lbl: "UPグレード", m: "up", cls: "#a2c4c9" }, { lbl: "T-プレミアム", m: "tp", cls: "#a2c4c9" }, { lbl: "室内コート", m: "ic", cls: "#a2c4c9" }, { lbl: "防錆コート", m: "rst", cls: "#a2c4c9" }, { lbl: "ナビ取付", m: "ni", cls: "#a2c4c9" }, { lbl: "ナビアップ", m: "nu", cls: "#a2c4c9" }, { lbl: "希望ナンバー", m: "hp", cls: "#a2c4c9" }, { lbl: "フィルム", m: "fl", cls: "#a2c4c9" }, { lbl: "アクアペル", m: "aq", cls: "#a2c4c9" }, { lbl: "下取り", m: "tr", cls: "#a2c4c9" },
-        { sec: "ローン実績" }, { lbl: "ローン", m: "ln", cls: "#a4c2f4" }, { lbl: "84回以上", m: "l84", cls: "#a4c2f4" }, { lbl: "残価設定", m: "zn", cls: "#a4c2f4" },
-        { sec: "受注時想定" }, { lbl: "受注台数", type: "arari_val", val: "j", cls: "#ead1dc" }, { lbl: "@車両粗利", type: "arari_avg", val: "ar21", cls: "#ead1dc" }, { lbl: "@全部割(保証込み)", type: "arari_avg", val: "ar25", cls: "#ead1dc" }, { lbl: "総粗利", type: "arari_sum", val: "ar25", cls: "#ead1dc" },
-        { sec: "納車着地粗利予測" },
-        { lbl: "納車台数", type: "del_arari_val", val: "del_cnt", cls: "#d9ead3" },
-        { lbl: "@車両粗利", type: "del_arari_avg", val: "del_ar21", cls: "#d9ead3" },
-        { lbl: "@ローンBK", type: "del_arari_avg", val: "del_ar23", cls: "#d9ead3" },
-        { lbl: "@下取粗利", type: "del_arari_avg", val: "del_ar22", cls: "#d9ead3" },
-        { lbl: "@全部割(保証抜)", type: "del_arari_avg", val: "del_ar24", cls: "#d9ead3" },
-        { lbl: "@全部割(保証込)", type: "del_arari_avg", val: "del_ar25", cls: "#d9ead3" },
-        { lbl: "総粗利(保証抜)", type: "del_arari_sum", val: "del_ar24", cls: "#d9ead3" },
-        { lbl: "総粗利(保証込)", type: "del_arari_sum", val: "del_ar25", cls: "#d9ead3" },
+        { lbl: "成約率", type: "ratio", n: "j", d: "v_n", cls: "#ffe599", redText: true }, { lbl: "昨年成約率", m: "empty", cls: "#d9d2e9" },
+        { lbl: "再来接客数", m: "rv", cls: "#ffffff" }, { lbl: "再来店率", type: "custom_ratio", n: "rv", d_sub: ["v_n", "jk"], cls: "#ffffff" },
+        { lbl: "再来成約", m: "rj", cls: "#ffffff" }, { lbl: "再来成約率", type: "custom_ratio", n: "rj", d_sub: ["v_n", "jk"], cls: "#ffffff" },
+        { lbl: "総接客数", m: "tot_v", cls: "#ffffff" }, { lbl: "総成約率", type: "ratio", n: "j", d: "tot_v", cls: "#ffffff" },
+        { lbl: "追客可能数", type: "diff", n: "v_n", d: "j", cls: "#f4cccc" }, { lbl: "決着済", m: "empty", cls: "#f4cccc" }, { lbl: "決着率", m: "empty", cls: "#f4cccc" },
+        { sec: "販売区分" }, { lbl: "新車", m: "n", cls: "#b6d7a8" }, { lbl: "獲得率", type: "ratio", n: "n", d: "j", cls: "#ffffff" }, { lbl: "未使用車", m: "m", cls: "#b6d7a8" }, { lbl: "獲得率", type: "ratio", n: "m", d: "j", cls: "#ffffff" }, { lbl: "中古車", m: "c", cls: "#b6d7a8" }, { lbl: "獲得率", type: "ratio", n: "c", d: "j", cls: "#ffffff" },
+        { sec: "付帯品個別" }, { lbl: "10年保証", m: "o2", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "o2", d: "j", cls: "#ffffff" }, { lbl: "中古保証", m: "o3", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "o3", d: "j", cls: "#ffffff" }, { lbl: "パック", m: "pk", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "pk", d: "j", cls: "#ffffff" }, { lbl: "コーティング", m: "ct", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "ct", d: "j", cls: "#ffffff" }, { lbl: "UPグレード", m: "up", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "up", d: "j", cls: "#ffffff" }, { lbl: "T-プレミアム", m: "tp", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "tp", d: "j", cls: "#ffffff" }, { lbl: "室内コート", m: "ic", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "ic", d: "j", cls: "#ffffff" }, { lbl: "防錆コート", m: "rst", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "rst", d: "j", cls: "#ffffff" }, { lbl: "ナビ取付", m: "ni", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "ni", d: "j", cls: "#ffffff" }, { lbl: "ナビアップ", m: "nu", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "nu", d: "j", cls: "#ffffff" }, { lbl: "希望ナンバー", m: "hp", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "hp", d: "j", cls: "#ffffff" }, { lbl: "フィルム", m: "fl", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "fl", d: "j", cls: "#ffffff" }, { lbl: "アクアペル", m: "aq", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "aq", d: "j", cls: "#ffffff" }, { lbl: "下取り", m: "tr", cls: "#a2c4c9" }, { lbl: "獲得率", type: "ratio", n: "tr", d: "j", cls: "#ffffff" },
+        { sec: "総付帯実績" }, { lbl: "車両総付帯", type: "sum", items: ["ct","up","tp","ic","rst","nu","fl","aq"], cls: "#a2c4c9" }, { lbl: "獲得率", type: "sum_ratio", items: ["ct","up","tp","ic","rst","nu","fl","aq"], d: "j", cls: "#ffffff" }, { lbl: "周辺総付帯", type: "sum", items: ["n","tr","ln","r69"], cls: "#a2c4c9" }, { lbl: "獲得率", type: "sum_ratio", items: ["n","tr","ln","r69"], d: "j", cls: "#ffffff" },
+        { sec: "ローン実績" }, { lbl: "ローン", m: "ln", cls: "#a4c2f4" }, { lbl: "ローン獲得率", type: "ratio", n: "ln", d: "j", cls: "#ffffff" }, { lbl: "84回以上", m: "l84", cls: "#a4c2f4" }, { lbl: "獲得率", type: "ratio", n: "l84", d: "j", cls: "#ffffff" }, { lbl: "6.90%", m: "r69", cls: "#a4c2f4" }, { lbl: "獲得率", type: "ratio", n: "r69", d: "j", cls: "#ffffff" }, { lbl: "5.90%", m: "r59", cls: "#a4c2f4" }, { lbl: "獲得率", type: "ratio", n: "r59", d: "j", cls: "#ffffff" }, { lbl: "4.90%", m: "r49", cls: "#a4c2f4" }, { lbl: "獲得率", type: "ratio", n: "r49", d: "j", cls: "#ffffff" }, { lbl: "3.90%", m: "r39", cls: "#a4c2f4" }, { lbl: "獲得率", type: "ratio", n: "r39", d: "j", cls: "#ffffff" }, { lbl: "2.90%", m: "r29", cls: "#a4c2f4" }, { lbl: "獲得率", type: "ratio", n: "r29", d: "j", cls: "#ffffff" }, { lbl: "低金利", m: "low", cls: "#a4c2f4" }, { lbl: "獲得率", type: "ratio", n: "low", d: "j", cls: "#ffffff" }, { lbl: "残価設定", m: "zn", cls: "#a4c2f4" }, { lbl: "獲得率", type: "ratio", n: "zn", d: "j", cls: "#ffffff" },
+        { sec: "受注時想定" }, { lbl: "受注台数", type: "arari_val", val: "j", cls: "#ead1dc" }, { lbl: "@車両粗利", type: "arari_avg", val: "ar21", cls: "#ead1dc" }, { lbl: "@ローンBK", type: "arari_avg", val: "ar23", cls: "#ead1dc" }, { lbl: "@下取粗利", type: "arari_avg", val: "ar22", cls: "#ead1dc" }, { lbl: "@全部割(保証抜き)", type: "arari_avg", val: "ar24", cls: "#ead1dc" }, { lbl: "@全部割(保証込み)", type: "arari_avg", val: "ar25", cls: "#ead1dc" }, { lbl: "総粗利", type: "arari_sum", val: "ar25", cls: "#ead1dc" },
         // --- 納車予算関連（予算データがある場合） ---
         { lbl: "納車台数予算", m: "budget_n", type: "total_only", cls: "#d9ead3" },
         { lbl: "達成率(台数)", type: "del_total_ratio", n: "del_cnt", d: "budget_n", cls: "#d9ead3" },
