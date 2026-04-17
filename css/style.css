@@ -17,9 +17,9 @@ th, td {
     padding: 0; 
     text-align: center; 
     white-space: nowrap; 
-    width: 100px !important; 
-    min-width: 100px !important; 
-    max-width: 100px !important; 
+    width: 115px !important; 
+    min-width: 115px !important; 
+    max-width: 115px !important; 
     box-sizing: border-box; 
     overflow: hidden; 
 }
@@ -32,9 +32,9 @@ th, td {
     font-weight: bold; 
     z-index: 110 !important; 
     border-right: 2px solid #444 !important; 
-    width: 170px !important; 
-    min-width: 170px !important; 
-    max-width: 170px !important; 
+    width: 160px !important; 
+    min-width: 160px !important; 
+    max-width: 160px !important; 
     text-align: left; 
     padding-left: 5px; 
 }
@@ -47,9 +47,9 @@ th, td {
     font-weight: bold; 
     z-index: 100 !important; 
     border-right: 2px solid #444 !important; 
-    width: 105px !important; 
-    min-width: 105px !important; 
-    max-width: 105px !important; 
+    width: 115px !important; 
+    min-width: 115px !important; 
+    max-width: 115px !important; 
 }
 
 .shop-header { background-color: #44546a; color: white; height: 35px; position: sticky; top: 0; z-index: 150; }
