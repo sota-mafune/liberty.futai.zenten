@@ -187,11 +187,20 @@ const rowDef = [
         { sec: "総付帯実績" }, { lbl: "車両総付帯", type: "sum", items: ["ct","up","tp","ic","rst","nu","fl","aq"], cls: "#a2c4c9" }, { lbl: "獲得率", type: "sum_ratio", items: ["ct","up","tp","ic","rst","nu","fl","aq"], d: "j", cls: "#ffffff" }, { lbl: "周辺総付帯", type: "sum", items: ["n","tr","ln","r69"], cls: "#a2c4c9" }, { lbl: "獲得率", type: "sum_ratio", items: ["n","tr","ln","r69"], d: "j", cls: "#ffffff" },
         { sec: "ローン実績" }, { lbl: "ローン", m: "ln", cls: "#a4c2f4" }, { lbl: "ローン獲得率", type: "ratio", n: "ln", d: "j", cls: "#ffffff" }, { lbl: "84回以上", m: "l84", cls: "#a4c2f4" }, { lbl: "獲得率", type: "ratio", n: "l84", d: "j", cls: "#ffffff" }, { lbl: "6.90%", m: "r69", cls: "#a4c2f4" }, { lbl: "獲得率", type: "ratio", n: "r69", d: "j", cls: "#ffffff" }, { lbl: "5.90%", m: "r59", cls: "#a4c2f4" }, { lbl: "獲得率", type: "ratio", n: "r59", d: "j", cls: "#ffffff" }, { lbl: "4.90%", m: "r49", cls: "#a4c2f4" }, { lbl: "獲得率", type: "ratio", n: "r49", d: "j", cls: "#ffffff" }, { lbl: "3.90%", m: "r39", cls: "#a4c2f4" }, { lbl: "獲得率", type: "ratio", n: "r39", d: "j", cls: "#ffffff" }, { lbl: "2.90%", m: "r29", cls: "#a4c2f4" }, { lbl: "獲得率", type: "ratio", n: "r29", d: "j", cls: "#ffffff" }, { lbl: "低金利", m: "low", cls: "#a4c2f4" }, { lbl: "獲得率", type: "ratio", n: "low", d: "j", cls: "#ffffff" }, { lbl: "残価設定", m: "zn", cls: "#a4c2f4" }, { lbl: "獲得率", type: "ratio", n: "zn", d: "j", cls: "#ffffff" },
         { sec: "受注時想定" }, { lbl: "受注台数", type: "arari_val", val: "j", cls: "#ead1dc" }, { lbl: "@車両粗利", type: "arari_avg", val: "ar21", cls: "#ead1dc" }, { lbl: "@ローンBK", type: "arari_avg", val: "ar23", cls: "#ead1dc" }, { lbl: "@下取粗利", type: "arari_avg", val: "ar22", cls: "#ead1dc" }, { lbl: "@全部割(保証抜き)", type: "arari_avg", val: "ar24", cls: "#ead1dc" }, { lbl: "@全部割(保証込み)", type: "arari_avg", val: "ar25", cls: "#ead1dc" }, { lbl: "総粗利", type: "arari_sum", val: "ar25", cls: "#ead1dc" },
-        // --- 納車予算関連（予算データがある場合） ---
-        { lbl: "納車台数予算", m: "budget_n", type: "total_only", cls: "#d9ead3" },
-        { lbl: "達成率(台数)", type: "del_total_ratio", n: "del_cnt", d: "budget_n", cls: "#d9ead3" },
-        { lbl: "総粗利(込)予算", m: "budget_ar", type: "total_only", cls: "#d9ead3" },
-        { lbl: "達成率(粗利)", type: "del_total_ratio_sum", n: "del_ar25", d: "budget_ar", cls: "#d9ead3" }
+// buildTable関数内の rowDef 末尾に追加
+{ sec: "納車着地粗利予測" },
+{ lbl: "納車台数", type: "del_arari_val", val: "del_cnt", cls: "#d9ead3" },
+{ lbl: "@車両粗利", type: "del_arari_avg", val: "del_ar21", cls: "#d9ead3" },
+{ lbl: "@ローンBK", type: "del_arari_avg", val: "del_ar23", cls: "#d9ead3" },
+{ lbl: "@下取粗利", type: "del_arari_avg", val: "del_ar22", cls: "#d9ead3" },
+{ lbl: "@全部割(保証抜)", type: "del_arari_avg", val: "del_ar24", cls: "#d9ead3" },
+{ lbl: "@全部割(保証込)", type: "del_arari_avg", val: "del_ar25", cls: "#d9ead3" },
+{ lbl: "総粗利(保証抜)", type: "del_arari_sum", val: "del_ar24", cls: "#d9ead3" },
+{ lbl: "総粗利(保証込)", type: "del_arari_sum", val: "del_ar25", cls: "#d9ead3" },
+{ lbl: "納車台数予算", m: "budget_n", type: "total_only", cls: "#d9ead3" },
+{ lbl: "達成率", type: "del_total_ratio", n: "del_cnt", d: "budget_n", cls: "#d9ead3" },
+{ lbl: "総粗利保証込予算", m: "budget_ar", type: "total_only", cls: "#d9ead3" },
+{ lbl: "達成率", type: "del_total_ratio", n: "del_ar25", d: "budget_ar", cls: "#d9ead3" }
     ];
 
     for(var j=0; j<rowDef.length; j++){ 
@@ -215,18 +224,13 @@ function renderCell(s, r, isT) {
     var c = isT ? "sticky-col-total " : "";
     var cellStyle = "background-color:" + bg + " !important;";
 
+    // 単一行表示（予算など）
     if(r.type === "total_only") {
         tVal = (s[r.m] || 0).toLocaleString();
         return "<td class='"+c+"' style='"+cellStyle+"'><div class='cell-stack' style='align-items:center; font-weight:bold; font-size:12px; color:#444;'>" + tVal + "</div></td>";
     }
-    else if(r.type === "total_ratio") {
-        var actual = (s[r.n+"_k"] || 0) + (s[r.n+"_f"] || 0);
-        var budget = s[r.d] || 0;
-        tVal = budget > 0 ? Math.round((actual / budget) * 100) + "%" : "0%";
-        return "<td class='"+c+"' style='"+cellStyle+"'><div class='cell-stack' style='align-items:center; font-weight:bold; font-size:12px;'>" + tVal + "</div></td>";
-    }
-    // 納車達成率用
-    else if(r.type === "del_total_ratio" || r.type === "del_total_ratio_sum") {
+    // 達成率表示
+    else if(r.type === "total_ratio" || r.type === "del_total_ratio") {
         var act = (s[r.n+"_k"] || 0) + (s[r.n+"_f"] || 0);
         var bud = s[r.d] || 0;
         tVal = bud > 0 ? Math.round((act / bud) * 100) + "%" : "0%";
@@ -237,11 +241,12 @@ function renderCell(s, r, isT) {
         return "<td class='"+c+"' style='"+cellStyle+"'><div class='cell-stack'><div class='stack-upper' style='display:flex;'><div class='val-kei'>-</div><div class='val-fu'>-</div></div><div class='stack-lower'>-</div></div></td>"; 
     }
 
-    // 受注時想定 & 納車時想定（del_...）の出し分け
+    // --- 2段構成の描画 (受注時想定 arari_ / 納車予測 del_arari_) ---
     var isDel = r.type && r.type.startsWith("del_arari");
     if(r.type && (r.type.startsWith("arari") || isDel)) {
         if(r.type.endsWith("_val")) { 
-            kVal = s[r.val+"_k"] || 0; fVal = s[r.val+"_f"] || 0; tVal = kVal + fVal; 
+            kVal = (s[r.val+"_k"] || 0); fVal = (s[r.val+"_f"] || 0); tVal = (kVal + fVal).toLocaleString(); 
+            kVal = kVal.toLocaleString(); fVal = fVal.toLocaleString();
         }
         else if(r.type.endsWith("_avg")) {
             var countK = isDel ? s.del_cnt_k : s.ar_cnt_k;
@@ -252,21 +257,31 @@ function renderCell(s, r, isT) {
             kVal = kA.toLocaleString(); fVal = fA.toLocaleString(); tVal = tA.toLocaleString();
         }
         else if(r.type.endsWith("_sum")) {
-            kVal = Math.round(s[r.val+"_k"] || 0).toLocaleString();
-            fVal = Math.round(s[r.val+"_f"] || 0).toLocaleString();
-            tVal = Math.round((s[r.val+"_k"] || 0) + (s[r.val+"_f"] || 0)).toLocaleString();
+            kVal = Math.round(s[r.val+"_k"] || 0);
+            fVal = Math.round(s[r.val+"_f"] || 0);
+            tVal = (kVal + fVal).toLocaleString();
+            kVal = kVal.toLocaleString(); fVal = fVal.toLocaleString();
         }
         
-        var innerBg = isDel ? "transparent" : "";
-        return "<td class='"+c+"' style='"+cellStyle+"'><div class='cell-stack'><div class='bg-sou-upper' style='background:"+innerBg+" !important; border-bottom:1px dotted #ccc;'>"+tVal+"</div><div class='bg-sou-lower' style='background:"+innerBg+" !important;'><div class='val-kei'>"+kVal+"</div><div class='val-fu'>"+fVal+"</div></div></div></td>";
+        // 納車セクション(isDel)の場合は、背景色の干渉を防ぐため transparent を指定
+        var innerStyle = isDel ? "background:transparent !important;" : "";
+        var borderStyle = isDel ? "border-bottom:1px dotted #999 !important;" : "";
+
+        return "<td class='"+c+"' style='"+cellStyle+"'>" +
+               "<div class='cell-stack'>" +
+               "<div class='bg-sou-upper' style='"+innerStyle+" "+borderStyle+"'>"+tVal+"</div>" +
+               "<div class='bg-sou-lower' style='"+innerStyle+"'>" +
+               "<div class='val-kei'>"+kVal+"</div><div class='val-fu'>"+fVal+"</div>" +
+               "</div></div></td>";
     }
 
+    // 実績 (3段構成)
     else if(r.lbl === "実績" && !r.type) {
         kVal = s.j_k; fVal = s.j_f; tVal = kVal + fVal;
         return "<td class='"+c+"' style='"+cellStyle+"'><div class='cell-stack'><div class='stack-label-3'><div style='width:50%;border-right:1px dotted #ccc;'>軽</div><div style='width:50%;'>普</div></div><div class='stack-values-3'><div class='val-kei'>"+kVal+"</div><div class='val-fu'>"+fVal+"</div></div><div class='stack-total-3'>"+tVal+"</div></div></td>";
     } 
+    // その他（通常項目・率など）
     else {
-        // 率の計算（既存ロジック）
         if(r.type === "ratio") { 
             var nk_k = s[r.n+"_k"], dk_k = s[r.d+"_k"], nk_f = s[r.n+"_f"], dk_f = s[r.d+"_f"]; 
             kVal = dk_k ? Math.round(nk_k/dk_k*100)+"%" : "0%"; 
@@ -279,15 +294,8 @@ function renderCell(s, r, isT) {
             fVal = dk_f > 0 ? Math.round(nk_f/dk_f*100)+"%" : "0%"; 
             tVal = (dk_k+dk_f) > 0 ? Math.round((nk_k+nk_f)/(dk_k+dk_f)*100)+"%" : "0%"; 
         }
-        else if(r.type === "diff") { tVal = (s[r.n+"_k"]+s[r.n+"_f"])-(s[r.d+"_k"]+s[r.d+"_f"]); }
-        else if(r.type === "sum") { tVal = 0; r.items.forEach(function(i){ tVal += (s[i+"_k"]+s[i+"_f"]); }); }
-        else if(r.type === "sum_ratio") { 
-            var tk_k=0, tf_f=0; r.items.forEach(function(i){ tk_k += s[i+"_k"]; tf_f += s[i+"_f"]; }); 
-            kVal = s[r.d+"_k"] ? Math.round(tk_k/s[r.d+"_k"]*100)+"%" : "0%"; 
-            fVal = s[r.d+"_f"] ? Math.round(tf_f/s[r.d+"_f"]*100)+"%" : "0%"; 
-            tVal = (s[r.d+"_k"]+s[r.d+"_f"]) ? Math.round((tk_k+tf_f)/(s[r.d+"_k"]+s[r.d+"_f"])*100)+"%" : "0%"; 
-        }
-        else { kVal = s[r.m+"_k"] || 0; fVal = s[r.m+"_f"] || 0; tVal = kVal + fVal; }
+        else { kVal = (s[r.m+"_k"] || 0); fVal = (s[r.m+"_f"] || 0); tVal = kVal + fVal; }
+        
         return "<td class='"+c+"' style='"+cellStyle+"'><div class='cell-stack "+textClass+"'><div class='stack-upper' style='display:flex;'><div class='val-kei'>"+kVal+"</div><div class='val-fu'>"+fVal+"</div></div><div class='stack-lower'>"+tVal+"</div></div></td>";
     }
 }
