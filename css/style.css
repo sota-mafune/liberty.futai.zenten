@@ -11,42 +11,45 @@ select { padding: 3px 8px; border-radius: 4px; border: 1px solid #999; font-size
 
 table { border-collapse: separate; border-spacing: 0; width: max-content; background: white; table-layout: fixed !important; }
 
-th, td { 
-    border: 1px solid #d9d9d9; 
-    padding: 0; 
-    text-align: center; 
-    white-space: nowrap; 
-    width: 115px !important; 
-    min-width: 115px !important; 
-    max-width: 115px !important; 
-    box-sizing: border-box; 
-    overflow: hidden; 
+/* 全てのセルに強制的に幅を指定 */
+th, td { 
+    border: 1px solid #d9d9d9; 
+    padding: 0; 
+    text-align: center; 
+    white-space: nowrap; 
+    width: 115px !important; 
+    min-width: 115px !important; 
+    max-width: 115px !important; 
+    box-sizing: border-box; 
+    overflow: hidden; 
 }
 
-.sticky-col-item { 
-    position: sticky !important; 
-    left: 0 !important; 
-    background-color: #f2f2f2; 
-    font-weight: bold; 
-    z-index: 110 !important; 
-    border-right: 2px solid #444 !important; 
-    width: 170px !important; 
-    min-width: 170px !important; 
-    max-width: 170px !important; 
-    text-align: left; 
-    padding-left: 5px; 
+/* 1列目：項目名固定 */
+.sticky-col-item { 
+    position: sticky !important; 
+    left: 0 !important; 
+    background-color: #f2f2f2; 
+    font-weight: bold; 
+    z-index: 110 !important; 
+    border-right: 2px solid #444 !important; 
+    width: 160px !important; 
+    min-width: 160px !important; 
+    max-width: 160px !important; 
+    text-align: left; 
+    padding-left: 5px; 
 }
 
-.sticky-col-total { 
-    position: sticky !important; 
-    left: 170px !important; 
-    background-color: #fff9e6; 
-    font-weight: bold; 
-    z-index: 100 !important; 
-    border-right: 2px solid #444 !important; 
-    width: 115px !important; 
-    min-width: 115px !important; 
-    max-width: 115px !important; 
+/* 2列目：合計列固定 */
+.sticky-col-total { 
+    position: sticky !important; 
+    left: 170px !important; 
+    background-color: #fff9e6; 
+    font-weight: bold; 
+    z-index: 100 !important; 
+    border-right: 2px solid #444 !important; 
+    width: 115px !important; 
+    min-width: 115px !important; 
+    max-width: 115px !important; 
 }
 
 .shop-header { background-color: #44546a; color: white; height: 35px; position: sticky; top: 0; z-index: 150; }
@@ -57,8 +60,23 @@ th, td {
 .val-kei { color: #0070c0; width: 50%; border-right: 1px dotted #d9d9d9; font-size: 9px; text-align: center; }
 .val-fu { color: #c00000; width: 50%; font-size: 9px; text-align: center; }
 .stack-lower { font-weight: bold; height: 20px; line-height: 20px; color: #000; font-size: 10px; text-align: center; }
-.bg-sou-upper { background-color: transparent !important; font-weight: bold; height: 20px; line-height: 20px; font-size: 10px; border-bottom: 1px dotted #999 !important; text-align: center; display: flex; align-items: center; justify-content: center; }
-.bg-sou-lower { background-color: #ffffff !important; font-weight: normal; height: 18px; line-height: 18px; display: flex; justify-content: center; }
+.stack-label-3 { display: flex; width: 100%; border-bottom: 1px dotted #ccc; height: 13px; line-height: 13px; font-size: 8px; color: #333; background: rgba(0,0,0,0.03); }
+.stack-values-3 { display: flex; width: 100%; border-bottom: 1px dotted #ccc; height: 16px; line-height: 16px; }
+.stack-total-3 { font-weight: bold; height: 18px; line-height: 18px; color: #b00; font-size: 10px; text-align: center; }
+.bg-sou-upper { background-color: #ead1dc !important; font-weight: bold; height: 20px; line-height: 20px; font-size: 10px; border-bottom: 1px solid #d9d9d9 !important; text-align: center; display: flex; align-items: center; justify-content: center; }
+.bg-sou-lower { background-color: #ffffff !important; font-weight: normal; height: 18px; line-height: 18px; border-top: 1px solid #d9d9d9; display: flex; justify-content: center; }
 .force-red { color: #ff0000 !important; }
 #loading { padding: 20px; color: #e67e22; font-weight: bold; }
 .page-content { display: none; } .page-content.active { display: block; }
+
+/* ★ここから追加：JSから色を指定するためのクラス */
+.bg-white { background-color: #ffffff !important; }
+.bg-yellow { background-color: #ffe599 !important; }
+.bg-purple { background-color: #d9d2e9 !important; }
+.bg-red-light { background-color: #f4cccc !important; }
+.bg-green { background-color: #b6d7a8 !important; }
+.bg-cyan { background-color: #a2c4c9 !important; }
+.bg-blue { background-color: #a4c2f4 !important; }
+.bg-pink { background-color: #ead1dc !important; }
+/* 納車セクション専用：最優先で薄緑を適用 */
+.bg-del-green { background-color: #d9ead3 !important; }
