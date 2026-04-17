@@ -113,9 +113,25 @@ function renderAll() {
                 var d = b["月"] || "";
                 if(d.includes(targetDateStr) || d.includes(selectedMonth)) {
                     var st = b["店舗"], pr = b["担当者"], gr = storeToGroup[st] || "未所属";
+                    
+                    // --- 予算項目の取得 ---
                     var val_j = parseInt(b["成約台数予算"]) || 0;
-                    if(!gS[gr]) gS[gr] = createStats(); if(!storeStatsMaster[st]) storeStatsMaster[st] = createStats(); if(!staffStatsMaster[pr]) staffStatsMaster[pr] = createStats();
-                    gS[gr].budget_j += val_j; storeStatsMaster[st].budget_j += val_j; staffStatsMaster[pr].budget_j += val_j; totalS.budget_j += val_j;
+                    // ★ 納車関連の予算（項目名はスプレッドシートに合わせて適宜変更してください）
+                    var val_n = parseInt(b["納車予算"]) || 0; 
+                    var val_ar = parseInt(b["粗利予算"]) || 0; 
+
+                    if(!gS[gr]) gS[gr] = createStats(); 
+                    if(!storeStatsMaster[st]) storeStatsMaster[st] = createStats(); 
+                    if(!staffStatsMaster[pr]) staffStatsMaster[pr] = createStats();
+                    
+                    storeGroupMap[st] = gr; staffStoreMap[pr] = st; groupSet.add(gr); storeSet.add(st);
+                    
+                    // 各統計オブジェクトに加算
+                    [gS[gr], storeStatsMaster[st], staffStatsMaster[pr], totalS].forEach(s => {
+                        s.budget_j += val_j;
+                        s.budget_n += val_n;  // ★追加
+                        s.budget_ar += val_ar; // ★追加
+                    });
                 }
             });
         }
@@ -131,9 +147,11 @@ function renderAll() {
             });
         }
     }
-    
+
+    // --- 以降の render 処理 ---
     setTimeout(() => { loadingEl.style.display = 'none'; }, 500);
-    updateSelector('group-selector', groupSet, '全グループ表示'); updateSelector('store-selector', storeSet, '全店舗表示');
+    updateSelector('group-selector', groupSet, '全グループ表示'); 
+    updateSelector('store-selector', storeSet, '全店舗表示');
     document.getElementById("group-table-container").innerHTML = buildTable(gS, "グループ名", totalS);
     filterStoreByGroup(); filterStaffByStore();
 }
@@ -165,11 +183,20 @@ function buildTable(sum, title, totalS) {
         { sec: "付帯品個別" }, { lbl: "10年保証", m: "o2", cls: "#a2c4c9" }, { lbl: "中古保証", m: "o3", cls: "#a2c4c9" }, { lbl: "パック", m: "pk", cls: "#a2c4c9" }, { lbl: "コーティング", m: "ct", cls: "#a2c4c9" }, { lbl: "UPグレード", m: "up", cls: "#a2c4c9" }, { lbl: "T-プレミアム", m: "tp", cls: "#a2c4c9" }, { lbl: "室内コート", m: "ic", cls: "#a2c4c9" }, { lbl: "防錆コート", m: "rst", cls: "#a2c4c9" }, { lbl: "ナビ取付", m: "ni", cls: "#a2c4c9" }, { lbl: "ナビアップ", m: "nu", cls: "#a2c4c9" }, { lbl: "希望ナンバー", m: "hp", cls: "#a2c4c9" }, { lbl: "フィルム", m: "fl", cls: "#a2c4c9" }, { lbl: "アクアペル", m: "aq", cls: "#a2c4c9" }, { lbl: "下取り", m: "tr", cls: "#a2c4c9" },
         { sec: "ローン実績" }, { lbl: "ローン", m: "ln", cls: "#a4c2f4" }, { lbl: "84回以上", m: "l84", cls: "#a4c2f4" }, { lbl: "残価設定", m: "zn", cls: "#a4c2f4" },
         { sec: "受注時想定" }, { lbl: "受注台数", type: "arari_val", val: "j", cls: "#ead1dc" }, { lbl: "@車両粗利", type: "arari_avg", val: "ar21", cls: "#ead1dc" }, { lbl: "@全部割(保証込み)", type: "arari_avg", val: "ar25", cls: "#ead1dc" }, { lbl: "総粗利", type: "arari_sum", val: "ar25", cls: "#ead1dc" },
-        // ★ 納車着地粗利予測セクション (薄緑: #d9ead3)
         { sec: "納車着地粗利予測" },
         { lbl: "納車台数", type: "del_arari_val", val: "del_cnt", cls: "#d9ead3" },
-        { lbl: "@全部割(保証込み)", type: "del_arari_avg", val: "del_ar25", count: "del_cnt", cls: "#d9ead3" },
-        { lbl: "総粗利", type: "del_arari_sum", val: "del_ar25", cls: "#d9ead3" }
+        { lbl: "@車両粗利", type: "del_arari_avg", val: "del_ar21", cls: "#d9ead3" },
+        { lbl: "@ローンBK", type: "del_arari_avg", val: "del_ar23", cls: "#d9ead3" },
+        { lbl: "@下取粗利", type: "del_arari_avg", val: "del_ar22", cls: "#d9ead3" },
+        { lbl: "@全部割(保証抜)", type: "del_arari_avg", val: "del_ar24", cls: "#d9ead3" },
+        { lbl: "@全部割(保証込)", type: "del_arari_avg", val: "del_ar25", cls: "#d9ead3" },
+        { lbl: "総粗利(保証抜)", type: "del_arari_sum", val: "del_ar24", cls: "#d9ead3" },
+        { lbl: "総粗利(保証込)", type: "del_arari_sum", val: "del_ar25", cls: "#d9ead3" },
+        // --- 納車予算関連（予算データがある場合） ---
+        { lbl: "納車台数予算", m: "budget_n", type: "total_only", cls: "#d9ead3" },
+        { lbl: "達成率(台数)", type: "del_total_ratio", n: "del_cnt", d: "budget_n", cls: "#d9ead3" },
+        { lbl: "総粗利(込)予算", m: "budget_ar", type: "total_only", cls: "#d9ead3" },
+        { lbl: "達成率(粗利)", type: "del_total_ratio_sum", n: "del_ar25", d: "budget_ar", cls: "#d9ead3" }
     ];
 
     for(var j=0; j<rowDef.length; j++){ 
@@ -191,39 +218,82 @@ function buildTable(sum, title, totalS) {
 function renderCell(s, r, isT) {
     var kVal = "-", fVal = "-", tVal = "-", bg = r.cls || "#ffffff", textClass = r.redText ? "force-red" : "";
     var c = isT ? "sticky-col-total " : "";
-    
+    var cellStyle = "background-color:" + bg + " !important;";
+
     if(r.type === "total_only") {
         tVal = (s[r.m] || 0).toLocaleString();
-        return "<td class='"+c+"' style='background-color:"+bg+"'><div class='cell-stack' style='align-items:center; font-weight:bold; font-size:12px; color:#444;'>" + tVal + "</div></td>";
+        return "<td class='"+c+"' style='"+cellStyle+"'><div class='cell-stack' style='align-items:center; font-weight:bold; font-size:12px; color:#444;'>" + tVal + "</div></td>";
     }
     else if(r.type === "total_ratio") {
         var actual = (s[r.n+"_k"] || 0) + (s[r.n+"_f"] || 0);
         var budget = s[r.d] || 0;
         tVal = budget > 0 ? Math.round((actual / budget) * 100) + "%" : "0%";
-        return "<td class='"+c+"' style='background-color:"+bg+"'><div class='cell-stack' style='align-items:center; font-weight:bold; font-size:12px;'>" + tVal + "</div></td>";
+        return "<td class='"+c+"' style='"+cellStyle+"'><div class='cell-stack' style='align-items:center; font-weight:bold; font-size:12px;'>" + tVal + "</div></td>";
     }
-    else if(r.type && r.type.startsWith("arari")) {
-        if(r.type === "arari_val") { kVal = s.j_k; fVal = s.j_f; tVal = kVal + fVal; }
-        else if(r.type === "arari_avg") { var kA = s.ar_cnt_k ? Math.round(s[r.val+"_k"]/s.ar_cnt_k) : 0; var fA = s.ar_cnt_f ? Math.round(s[r.val+"_f"]/s.ar_cnt_f) : 0; var tA = (s.ar_cnt_k+s.ar_cnt_f) ? Math.round((s[r.val+"_k"]+s[r.val+"_f"])/(s.ar_cnt_k+s.ar_cnt_f)) : 0; kVal = kA.toLocaleString(); fVal = fA.toLocaleString(); tVal = tA.toLocaleString(); }
-        else { kVal = Math.round(s[r.val+"_k"]).toLocaleString(); fVal = Math.round(s[r.val+"_f"]).toLocaleString(); tVal = Math.round(s[r.val+"_k"]+s[r.val+"_f"]).toLocaleString(); }
-        return "<td class='"+c+"'><div class='cell-stack'><div class='bg-sou-upper'>"+tVal+"</div><div class='bg-sou-lower'><div class='val-kei'>"+kVal+"</div><div class='val-fu'>"+fVal+"</div></div></div></td>";
+    // 納車達成率用
+    else if(r.type === "del_total_ratio" || r.type === "del_total_ratio_sum") {
+        var act = (s[r.n+"_k"] || 0) + (s[r.n+"_f"] || 0);
+        var bud = s[r.d] || 0;
+        tVal = bud > 0 ? Math.round((act / bud) * 100) + "%" : "0%";
+        return "<td class='"+c+"' style='"+cellStyle+"'><div class='cell-stack' style='align-items:center; font-weight:bold; font-size:12px;'>" + tVal + "</div></td>";
     }
-    // ★ 納車用セルレンダリング
-    else if(r.type && r.type.startsWith("del_arari")) {
-        if(r.type === "del_arari_val") { kVal = s.del_cnt_k; fVal = s.del_cnt_f; tVal = kVal + fVal; }
-        else if(r.type === "del_arari_avg") { var kA = s.del_cnt_k ? Math.round(s[r.val+"_k"]/s.del_cnt_k) : 0; var fA = s.del_cnt_f ? Math.round(s[r.val+"_f"]/s.del_cnt_f) : 0; var tA = (s.del_cnt_k+s.del_cnt_f) ? Math.round((s[r.val+"_k"]+s[r.val+"_f"])/(s.del_cnt_k+s.del_cnt_f)) : 0; kVal = kA.toLocaleString(); fVal = fA.toLocaleString(); tVal = tA.toLocaleString(); }
-        else { kVal = Math.round(s[r.val+"_k"]).toLocaleString(); fVal = Math.round(s[r.val+"_f"]).toLocaleString(); tVal = Math.round(s[r.val+"_k"]+s[r.val+"_f"]).toLocaleString(); }
-        return "<td class='"+c+"' style='background-color:"+bg+"'><div class='cell-stack'><div class='bg-sou-upper'>"+tVal+"</div><div class='bg-sou-lower'><div class='val-kei'>"+kVal+"</div><div class='val-fu'>"+fVal+"</div></div></div></td>";
+
+    if(r.m === "empty") { 
+        return "<td class='"+c+"' style='"+cellStyle+"'><div class='cell-stack'><div class='stack-upper' style='display:flex;'><div class='val-kei'>-</div><div class='val-fu'>-</div></div><div class='stack-lower'>-</div></div></td>"; 
     }
+
+    // 受注時想定 & 納車時想定（del_...）の出し分け
+    var isDel = r.type && r.type.startsWith("del_arari");
+    if(r.type && (r.type.startsWith("arari") || isDel)) {
+        if(r.type.endsWith("_val")) { 
+            kVal = s[r.val+"_k"] || 0; fVal = s[r.val+"_f"] || 0; tVal = kVal + fVal; 
+        }
+        else if(r.type.endsWith("_avg")) {
+            var countK = isDel ? s.del_cnt_k : s.ar_cnt_k;
+            var countF = isDel ? s.del_cnt_f : s.ar_cnt_f;
+            var kA = countK ? Math.round(s[r.val+"_k"]/countK) : 0;
+            var fA = countF ? Math.round(s[r.val+"_f"]/countF) : 0;
+            var tA = (countK+countF) ? Math.round((s[r.val+"_k"]+s[r.val+"_f"])/(countK+countF)) : 0;
+            kVal = kA.toLocaleString(); fVal = fA.toLocaleString(); tVal = tA.toLocaleString();
+        }
+        else if(r.type.endsWith("_sum")) {
+            kVal = Math.round(s[r.val+"_k"] || 0).toLocaleString();
+            fVal = Math.round(s[r.val+"_f"] || 0).toLocaleString();
+            tVal = Math.round((s[r.val+"_k"] || 0) + (s[r.val+"_f"] || 0)).toLocaleString();
+        }
+        
+        var innerBg = isDel ? "transparent" : "";
+        return "<td class='"+c+"' style='"+cellStyle+"'><div class='cell-stack'><div class='bg-sou-upper' style='background:"+innerBg+" !important; border-bottom:1px dotted #ccc;'>"+tVal+"</div><div class='bg-sou-lower' style='background:"+innerBg+" !important;'><div class='val-kei'>"+kVal+"</div><div class='val-fu'>"+fVal+"</div></div></div></td>";
+    }
+
     else if(r.lbl === "実績" && !r.type) {
         kVal = s.j_k; fVal = s.j_f; tVal = kVal + fVal;
-        return "<td class='"+c+"' style='background-color:"+bg+"'><div class='cell-stack'><div class='stack-label-3'><div style='width:50%;border-right:1px dotted #ccc;'>軽</div><div style='width:50%;'>普</div></div><div class='stack-values-3'><div class='val-kei'>"+kVal+"</div><div class='val-fu'>"+fVal+"</div></div><div class='stack-total-3'>"+tVal+"</div></div></td>";
-    }
+        return "<td class='"+c+"' style='"+cellStyle+"'><div class='cell-stack'><div class='stack-label-3'><div style='width:50%;border-right:1px dotted #ccc;'>軽</div><div style='width:50%;'>普</div></div><div class='stack-values-3'><div class='val-kei'>"+kVal+"</div><div class='val-fu'>"+fVal+"</div></div><div class='stack-total-3'>"+tVal+"</div></div></td>";
+    } 
     else {
-        if(r.type === "ratio") { var nk_k = s[r.n+"_k"], dk_k = s[r.d+"_k"], nk_f = s[r.n+"_f"], dk_f = s[r.d+"_f"]; kVal = dk_k ? Math.round(nk_k/dk_k*100)+"%" : "0%"; fVal = dk_f ? Math.round(nk_f/dk_f*100)+"%" : "0%"; tVal = (dk_k+dk_f) ? Math.round((nk_k+nk_f)/(dk_k+dk_f)*100)+"%" : "0%"; }
-        else if(r.m === "empty") { kVal = "-"; fVal = "-"; tVal = "-"; }
-        else { kVal = s[r.m+"_k"]; fVal = s[r.m+"_f"]; tVal = kVal + fVal; }
-        return "<td class='"+c+"' style='background-color:"+bg+"'><div class='cell-stack "+textClass+"'><div class='stack-upper' style='display:flex;'><div class='val-kei'>"+kVal+"</div><div class='val-fu'>"+fVal+"</div></div><div class='stack-lower'>"+tVal+"</div></div></td>";
+        // 率の計算（既存ロジック）
+        if(r.type === "ratio") { 
+            var nk_k = s[r.n+"_k"], dk_k = s[r.d+"_k"], nk_f = s[r.n+"_f"], dk_f = s[r.d+"_f"]; 
+            kVal = dk_k ? Math.round(nk_k/dk_k*100)+"%" : "0%"; 
+            fVal = dk_f ? Math.round(nk_f/dk_f*100)+"%" : "0%"; 
+            tVal = (dk_k+dk_f) ? Math.round((nk_k+nk_f)/(dk_k+dk_f)*100)+"%" : "0%"; 
+        }
+        else if(r.type === "custom_ratio") { 
+            var nk_k = s[r.n+"_k"], dk_k = (s[r.d_sub[0]+"_k"] - s[r.d_sub[1]+"_k"]), nk_f = s[r.n+"_f"], dk_f = (s[r.d_sub[0]+"_f"] - s[r.d_sub[1]+"_f"]); 
+            kVal = dk_k > 0 ? Math.round(nk_k/dk_k*100)+"%" : "0%"; 
+            fVal = dk_f > 0 ? Math.round(nk_f/dk_f*100)+"%" : "0%"; 
+            tVal = (dk_k+dk_f) > 0 ? Math.round((nk_k+nk_f)/(dk_k+dk_f)*100)+"%" : "0%"; 
+        }
+        else if(r.type === "diff") { tVal = (s[r.n+"_k"]+s[r.n+"_f"])-(s[r.d+"_k"]+s[r.d+"_f"]); }
+        else if(r.type === "sum") { tVal = 0; r.items.forEach(function(i){ tVal += (s[i+"_k"]+s[i+"_f"]); }); }
+        else if(r.type === "sum_ratio") { 
+            var tk_k=0, tf_f=0; r.items.forEach(function(i){ tk_k += s[i+"_k"]; tf_f += s[i+"_f"]; }); 
+            kVal = s[r.d+"_k"] ? Math.round(tk_k/s[r.d+"_k"]*100)+"%" : "0%"; 
+            fVal = s[r.d+"_f"] ? Math.round(tf_f/s[r.d+"_f"]*100)+"%" : "0%"; 
+            tVal = (s[r.d+"_k"]+s[r.d+"_f"]) ? Math.round((tk_k+tf_f)/(s[r.d+"_k"]+s[r.d+"_f"])*100)+"%" : "0%"; 
+        }
+        else { kVal = s[r.m+"_k"] || 0; fVal = s[r.m+"_f"] || 0; tVal = kVal + fVal; }
+        return "<td class='"+c+"' style='"+cellStyle+"'><div class='cell-stack "+textClass+"'><div class='stack-upper' style='display:flex;'><div class='val-kei'>"+kVal+"</div><div class='val-fu'>"+fVal+"</div></div><div class='stack-lower'>"+tVal+"</div></div></td>";
     }
 }
 
