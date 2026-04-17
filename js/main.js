@@ -154,28 +154,80 @@ function buildTable(sum, title, totalS) {
 
 function renderCell(s, r, isT) {
     var kVal = "-", fVal = "-", tVal = "-", bg = r.cls || "#ffffff", textClass = r.redText ? "force-red" : "", c = isT ? "sticky-col-total " : "", cellStyle = "background-color:" + bg + " !important;";
-    if(r.type === "total_only") { tVal = (s[r.m] || 0).toLocaleString(); return "<td class='"+c+"' style='"+cellStyle+"'><div class='cell-stack' style='align-items:center; font-weight:bold; font-size:12px; color:#444;'>" + tVal + "</div></td>"; }
-    else if(r.type === "total_ratio" || r.type === "del_total_ratio") { var act = (s[r.n+"_k"] || 0) + (s[r.n+"_f"] || 0), bud = s[r.d] || 0; tVal = bud > 0 ? Math.round((act / bud) * 100) + "%" : "0%"; return "<td class='"+c+"' style='"+cellStyle+"'><div class='cell-stack' style='align-items:center; font-weight:bold; font-size:12px;'>" + tVal + "</div></td>"; }
-    if(r.m === "empty") { return "<td class='"+c+"' style='"+cellStyle+"'><div class='cell-stack'><div class='stack-upper' style='display:flex;'><div class='val-kei'>-</div><div class='val-fu'>-</div></div><div class='stack-lower'>-</div></div></td>"; }
-    var isArari = r.type && r.type.startsWith("arari"), isDel = r.type && r.type.startsWith("del_arari");
+
+    // --- 1. 特殊判定変数 ---
+    var isArari = r.type && r.type.startsWith("arari");
+    var isDel = r.type && r.type.startsWith("del_arari");
+
+    // --- 2. 【受注・納車】二段構成セルの処理 ---
     if(isArari || isDel) {
-        var countK = isDel ? (s.del_cnt_k || 0) : (s.ar_cnt_k || 0), countF = isDel ? (s.del_cnt_f || 0) : (s.ar_cnt_f || 0);
-        if(r.type.endsWith("_val")) { kVal = (s[r.val+"_k"] || 0); fVal = (s[r.val+"_f"] || 0); tVal = (kVal + fVal).toLocaleString(); kVal = kVal.toLocaleString(); fVal = fVal.toLocaleString(); }
+        var countK = isDel ? (s.del_cnt_k || 0) : (s.ar_cnt_k || 0);
+        var countF = isDel ? (s.del_cnt_f || 0) : (s.ar_cnt_f || 0);
+
+        if(r.type.endsWith("_val")) {
+            kVal = (s[r.val+"_k"] || 0); fVal = (s[r.val+"_f"] || 0); tVal = (kVal + fVal).toLocaleString();
+            kVal = kVal.toLocaleString(); fVal = fVal.toLocaleString();
+        }
         else if(r.type.endsWith("_avg")) {
-            var kA = countK ? Math.round((s[r.val+"_k"]||0)/countK) : 0, fA = countF ? Math.round((s[r.val+"_f"]||0)/countF) : 0, tA = (countK+countF) ? Math.round(((s[r.val+"_k"]||0)+(s[r.val+"_f"]||0))/(countK+countF)) : 0;
+            var kA = countK ? Math.round((s[r.val+"_k"]||0)/countK) : 0;
+            var fA = countF ? Math.round((s[r.val+"_f"]||0)/countF) : 0;
+            var tA = (countK+countF) ? Math.round(((s[r.val+"_k"]||0)+(s[r.val+"_f"]||0))/(countK+countF)) : 0;
             kVal = kA.toLocaleString(); fVal = fA.toLocaleString(); tVal = tA.toLocaleString();
         }
-        else if(r.type.endsWith("_sum")) { kVal = Math.round(s[r.val+"_k"] || 0); fVal = Math.round(s[r.val+"_f"] || 0); tVal = (kVal + fVal).toLocaleString(); kVal = kVal.toLocaleString(); fVal = fVal.toLocaleString(); }
-        var lowerBg = isDel ? "background:#ffffff !important;" : "background:transparent !important;";
-        return "<td class='"+c+"' style='"+cellStyle+"'><div class='cell-stack'><div class='bg-sou-upper' style='background:transparent !important; border-bottom:1px dotted #999 !important; font-weight:bold;'>"+tVal+"</div><div class='bg-sou-lower' style='"+lowerBg+" color:#333; display:flex;'><div class='val-kei'>"+kVal+"</div><div class='val-fu'>"+fVal+"</div></div></div></td>";
+        else if(r.type.endsWith("_sum")) {
+            kVal = Math.round(s[r.val+"_k"] || 0); fVal = Math.round(s[r.val+"_f"] || 0);
+            tVal = (kVal + fVal).toLocaleString();
+            kVal = kVal.toLocaleString(); fVal = fVal.toLocaleString();
+        }
+
+        // ★受注時想定も納車予測も「上段：透過(セクション色)、下段：白」にする設定
+        var upperStyle = "background:transparent !important; border-bottom:1px dotted #999 !important; font-weight:bold;";
+        var lowerStyle = "background:#ffffff !important; color:#333; display:flex;";
+
+        return "<td class='"+c+"' style='"+cellStyle+"'><div class='cell-stack'>" +
+               "<div class='bg-sou-upper' style='"+upperStyle+"'>"+tVal+"</div>" +
+               "<div class='bg-sou-lower' style='"+lowerStyle+"'>" +
+               "<div class='val-kei'>"+kVal+"</div><div class='val-fu'>"+fVal+"</div>" +
+               "</div></div></td>";
     }
-    else if(r.lbl === "実績" && !r.type && !r.m.includes("arari")) {
+
+    // --- 3. 予算・単一項目 ---
+    if(r.type === "total_only") {
+        tVal = (s[r.m] || 0).toLocaleString();
+        return "<td class='"+c+"' style='"+cellStyle+"'><div class='cell-stack' style='align-items:center; font-weight:bold; font-size:12px; color:#444;'>" + tVal + "</div></td>";
+    }
+    
+    // --- 4. 達成率・率 ---
+    else if(r.type === "total_ratio" || r.type === "del_total_ratio") {
+        var act = (s[r.n+"_k"] || 0) + (s[r.n+"_f"] || 0), bud = s[r.d] || 0;
+        tVal = bud > 0 ? Math.round((act / bud) * 100) + "%" : "0%";
+        return "<td class='"+c+"' style='"+cellStyle+"'><div class='cell-stack' style='align-items:center; font-weight:bold; font-size:12px;'>" + tVal + "</div></td>";
+    }
+
+    // --- 5. 【実績】三段構成セルの処理 ---
+    else if(r.lbl === "実績" && !r.type) {
         kVal = (s.j_k || 0).toLocaleString(); fVal = (s.j_f || 0).toLocaleString(); tVal = ((s.j_k || 0) + (s.j_f || 0)).toLocaleString();
-        return "<td class='"+c+"' style='"+cellStyle+"'><div class='cell-stack'><div class='stack-label-3'><div style='width:50%;border-right:1px dotted #ccc;'>軽</div><div style='width:50%;'>普</div></div><div class='stack-values-3' style='background:#ffffff !important; display:flex;'><div class='val-kei'>"+kVal+"</div><div class='val-fu'>"+fVal+"</div></div><div class='stack-total-3' style='background:#ffffff !important; font-weight:bold;'>"+tVal+"</div></div></td>";
-    } 
+        return "<td class='"+c+"' style='"+cellStyle+"'><div class='cell-stack'>" +
+               "<div class='stack-label-3'><div style='width:50%;border-right:1px dotted #ccc;'>軽</div><div style='width:50%;'>普</div></div>" +
+               "<div class='stack-values-3' style='background:#ffffff !important; display:flex;'><div class='val-kei'>"+kVal+"</div><div class='val-fu'>"+fVal+"</div></div>" +
+               "<div class='stack-total-3' style='background:#ffffff !important; font-weight:bold;'>"+tVal+"</div></div></td>";
+    }
+
+    // --- 6. その他（通常の1段・2段項目） ---
     else {
-        if(r.type === "ratio") { var nk_k = s[r.n+"_k"], dk_k = s[r.d+"_k"], nk_f = s[r.n+"_f"], dk_f = s[r.d+"_f"]; kVal = dk_k ? Math.round(nk_k/dk_k*100)+"%" : "0%"; fVal = dk_f ? Math.round(nk_f/dk_f*100)+"%" : "0%"; tVal = (dk_k+dk_f) ? Math.round((nk_k+nk_f)/(dk_k+dk_f)*100)+"%" : "0%"; }
-        else if(r.type === "custom_ratio") { var nk_k = s[r.n+"_k"], dk_k = (s[r.d_sub[0]+"_k"] - s[r.d_sub[1]+"_k"]), nk_f = s[r.n+"_f"], dk_f = (s[r.d_sub[0]+"_f"] - s[r.d_sub[1]+"_f"]); kVal = dk_k > 0 ? Math.round(nk_k/dk_k*100)+"%" : "0%"; fVal = dk_f > 0 ? Math.round(nk_f/dk_f*100)+"%" : "0%"; tVal = (dk_k+dk_f) > 0 ? Math.round((nk_k+nk_f)/(dk_k+dk_f)*100)+"%" : "0%"; }
+        if(r.m === "empty") {
+            return "<td class='"+c+"' style='"+cellStyle+"'><div class='cell-stack'><div class='stack-upper' style='display:flex;'><div class='val-kei'>-</div><div class='val-fu'>-</div></div><div class='stack-lower'>-</div></div></td>";
+        }
+        if(r.type === "ratio") {
+            var nk_k = s[r.n+"_k"], dk_k = s[r.d+"_k"], nk_f = s[r.n+"_f"], dk_f = s[r.d+"_f"];
+            kVal = dk_k ? Math.round(nk_k/dk_k*100)+"%" : "0%"; fVal = dk_f ? Math.round(nk_f/dk_f*100)+"%" : "0%";
+            tVal = (dk_k+dk_f) ? Math.round((nk_k+nk_f)/(dk_k+dk_f)*100)+"%" : "0%";
+        }
+        else if(r.type === "custom_ratio") {
+            var nk_k = s[r.n+"_k"], dk_k = (s[r.d_sub[0]+"_k"] - s[r.d_sub[1]+"_k"]), nk_f = s[r.n+"_f"], dk_f = (s[r.d_sub[0]+"_f"] - s[r.d_sub[1]+"_f"]);
+            kVal = dk_k > 0 ? Math.round(nk_k/dk_k*100)+"%" : "0%"; fVal = dk_f > 0 ? Math.round(nk_f/dk_f*100)+"%" : "0%";
+            tVal = (dk_k+dk_f) > 0 ? Math.round((nk_k+nk_f)/(dk_k+dk_f)*100)+"%" : "0%";
+        }
         else { kVal = (s[r.m+"_k"] || 0).toLocaleString(); fVal = (s[r.m+"_f"] || 0).toLocaleString(); tVal = ((s[r.m+"_k"] || 0) + (s[r.m+"_f"] || 0)).toLocaleString(); }
         return "<td class='"+c+"' style='"+cellStyle+"'><div class='cell-stack "+textClass+"'><div class='stack-upper' style='display:flex;'><div class='val-kei'>"+kVal+"</div><div class='val-fu'>"+fVal+"</div></div><div class='stack-lower' style='font-weight:bold;'>"+tVal+"</div></div></td>";
     }
