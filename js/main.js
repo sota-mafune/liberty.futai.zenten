@@ -275,8 +275,8 @@ function renderCell(s, r, isT) {
                "</div></div></td>";
     }
 
-    // --- 【実績】三段構成セルの処理 ---
-    else if(r.lbl === "実績" && !r.type) {
+    // --- 【実績】三段構成セルの処理 (ここを厳密に修正) ---
+    else if(r.lbl === "実績" && !r.type && !r.m.includes("arari")) {
         kVal = (s.j_k || 0).toLocaleString(); fVal = (s.j_f || 0).toLocaleString(); tVal = ((s.j_k || 0) + (s.j_f || 0)).toLocaleString();
         return "<td class='"+c+"' style='"+cellStyle+"'><div class='cell-stack'>" +
                "<div class='stack-label-3'><div style='width:50%;border-right:1px dotted #ccc;'>軽</div><div style='width:50%;'>普</div></div>" +
@@ -284,7 +284,7 @@ function renderCell(s, r, isT) {
                "<div class='stack-total-3' style='background:#ffffff !important; font-weight:bold;'>"+tVal+"</div></div></td>";
     }
 
-    // --- その他 (通常項目・率) ---
+    // --- その他 (受注セクションなど、通常の1段・2段項目) ---
     else {
         if(r.type === "ratio") {
             var nk_k = s[r.n+"_k"], dk_k = s[r.d+"_k"], nk_f = s[r.n+"_f"], dk_f = s[r.d+"_f"];
@@ -297,6 +297,8 @@ function renderCell(s, r, isT) {
             tVal = (dk_k+dk_f) > 0 ? Math.round((nk_k+nk_f)/(dk_k+dk_f)*100)+"%" : "0%";
         }
         else { kVal = (s[r.m+"_k"] || 0).toLocaleString(); fVal = (s[r.m+"_f"] || 0).toLocaleString(); tVal = ((s[r.m+"_k"] || 0) + (s[r.m+"_f"] || 0)).toLocaleString(); }
+        
+        // 受注セクションなどの通常セルは、指定された背景色(cellStyle)をそのまま適用
         return "<td class='"+c+"' style='"+cellStyle+"'><div class='cell-stack "+textClass+"'><div class='stack-upper' style='display:flex;'><div class='val-kei'>"+kVal+"</div><div class='val-fu'>"+fVal+"</div></div><div class='stack-lower' style='font-weight:bold;'>"+tVal+"</div></div></td>";
     }
 }
