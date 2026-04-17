@@ -242,8 +242,8 @@ function renderCell(s, r, isT) {
     }
 
     // --- 2段構成の描画 (受注時想定 arari_ / 納車予測 del_arari_) ---
-    var isDel = r.type && r.type.startsWith("del_arari");
-    if(r.type && (r.type.startsWith("arari") || isDel)) {
+   // renderCell関数内の del_arari 判定部分を以下に差し替えてください
+    else if(r.type && r.type.startsWith("del_arari")) {
         if(r.type.endsWith("_val")) { 
             kVal = (s[r.val+"_k"] || 0); fVal = (s[r.val+"_f"] || 0); tVal = (kVal + fVal).toLocaleString(); 
             kVal = kVal.toLocaleString(); fVal = fVal.toLocaleString();
@@ -251,9 +251,10 @@ function renderCell(s, r, isT) {
         else if(r.type.endsWith("_avg")) {
             var countK = isDel ? s.del_cnt_k : s.ar_cnt_k;
             var countF = isDel ? s.del_cnt_f : s.ar_cnt_f;
-            var kA = countK ? Math.round(s[r.val+"_k"]/countK) : 0;
-            var fA = countF ? Math.round(s[r.val+"_f"]/countF) : 0;
-            var tA = (countK+countF) ? Math.round((s[r.val+"_k"]+s[r.val+"_f"])/(countK+countF)) : 0;
+            // NaN対策：分母が0の場合は0にする
+            var kA = countK ? Math.round((s[r.val+"_k"]||0)/countK) : 0;
+            var fA = countF ? Math.round((s[r.val+"_f"]||0)/countF) : 0;
+            var tA = (countK+countF) ? Math.round(((s[r.val+"_k"]||0)+(s[r.val+"_f"]||0))/(countK+countF)) : 0;
             kVal = kA.toLocaleString(); fVal = fA.toLocaleString(); tVal = tA.toLocaleString();
         }
         else if(r.type.endsWith("_sum")) {
@@ -263,16 +264,14 @@ function renderCell(s, r, isT) {
             kVal = kVal.toLocaleString(); fVal = fVal.toLocaleString();
         }
         
-        // 納車セクション(isDel)の場合は、背景色の干渉を防ぐため transparent を指定
-        var innerStyle = isDel ? "background:transparent !important;" : "";
-        var borderStyle = isDel ? "border-bottom:1px dotted #999 !important;" : "";
-
+        // ★修正ポイント：下段(bg-sou-lower)に background:#fff を直接指定
         return "<td class='"+c+"' style='"+cellStyle+"'>" +
                "<div class='cell-stack'>" +
-               "<div class='bg-sou-upper' style='"+innerStyle+" "+borderStyle+"'>"+tVal+"</div>" +
-               "<div class='bg-sou-lower' style='"+innerStyle+"'>" +
+               "<div class='bg-sou-upper' style='background:transparent !important; border-bottom:1px dotted #999 !important; font-weight:bold;'>"+tVal+"</div>" +
+               "<div class='bg-sou-lower' style='background:#ffffff !important; color:#333;'>" + 
                "<div class='val-kei'>"+kVal+"</div><div class='val-fu'>"+fVal+"</div>" +
                "</div></div></td>";
+    }
     }
 
     // 実績 (3段構成)
