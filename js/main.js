@@ -66,7 +66,7 @@ async function fetchAnalyticsBudgets() {
 }
 
 // ★ 納車用の集計項目を追加 (del_...)
-function createStats() { return { budget_j:0, budget_current:0, j_k:0, j_f:0, v_n_k:0, v_n_f:0, sho_k:0, sho_f:0, ab_k:0, ab_f:0, jk_k:0, jk_f:0, rv_k:0, rv_f:0, rj_k:0, rj_f:0, tot_v_k:0, tot_v_f:0, n_k:0, n_f:0, m_k:0, m_f:0, c_k:0, c_f:0, o2_k:0, o2_f:0, o3_k:0, o3_f:0, pk_k:0, pk_f:0, ct_k:0, ct_f:0, up_k:0, up_f:0, tp_k:0, tp_f:0, ic_k:0, ic_f:0, rst_k:0, rst_f:0, ni_k:0, ni_f:0, nu_k:0, nu_f:0, hp_k:0, hp_f:0, fl_k:0, fl_f:0, aq_k:0, aq_f:0, tr_k:0, tr_f:0, ln_k:0, ln_f:0, l84_k:0, l84_f:0, r69_k:0, r69_f:0, r59_k:0, r59_f:0, r49_k:0, r49_f:0, r39_k:0, r39_f:0, r29_k:0, r29_f:0, low_k:0, low_f:0, zn_k:0, zn_f:0, ar21_k:0, ar21_f:0, ar22_k:0, ar22_f:0, ar23_k:0, ar23_f:0, ar24_k:0, ar24_f:0, ar25_k:0, ar25_f:0, ar_cnt_k:0, ar_cnt_f:0, del_cnt_k:0, del_cnt_f:0, del_ar21_k:0, del_ar21_f:0, del_ar22_k:0, del_ar22_f:0, del_ar23_k:0, del_ar23_f:0, del_ar24_k:0, del_ar24_f:0, del_ar25_k:0, del_ar25_f:0, g_sls:0 }; }
+function createStats() { return { budget_n, budget_ar, budget_j:0, budget_current:0, j_k:0, j_f:0, v_n_k:0, v_n_f:0, sho_k:0, sho_f:0, ab_k:0, ab_f:0, jk_k:0, jk_f:0, rv_k:0, rv_f:0, rj_k:0, rj_f:0, tot_v_k:0, tot_v_f:0, n_k:0, n_f:0, m_k:0, m_f:0, c_k:0, c_f:0, o2_k:0, o2_f:0, o3_k:0, o3_f:0, pk_k:0, pk_f:0, ct_k:0, ct_f:0, up_k:0, up_f:0, tp_k:0, tp_f:0, ic_k:0, ic_f:0, rst_k:0, rst_f:0, ni_k:0, ni_f:0, nu_k:0, nu_f:0, hp_k:0, hp_f:0, fl_k:0, fl_f:0, aq_k:0, aq_f:0, tr_k:0, tr_f:0, ln_k:0, ln_f:0, l84_k:0, l84_f:0, r69_k:0, r69_f:0, r59_k:0, r59_f:0, r49_k:0, r49_f:0, r39_k:0, r39_f:0, r29_k:0, r29_f:0, low_k:0, low_f:0, zn_k:0, zn_f:0, ar21_k:0, ar21_f:0, ar22_k:0, ar22_f:0, ar23_k:0, ar23_f:0, ar24_k:0, ar24_f:0, ar25_k:0, ar25_f:0, ar_cnt_k:0, ar_cnt_f:0, del_cnt_k:0, del_cnt_f:0, del_ar21_k:0, del_ar21_f:0, del_ar22_k:0, del_ar22_f:0, del_ar23_k:0, del_ar23_f:0, del_ar24_k:0, del_ar24_f:0, del_ar25_k:0, del_ar25_f:0, g_sls:0 }; }
 
 function aggregate(s, rec) {
     var c = (rec.SyaryouCategory === "軽" || rec.SyaryouCategory === "軽自動車") ? "k" : "f";
@@ -232,11 +232,18 @@ function renderCell(s, r, isT) {
         return "<td class='"+c+"' style='"+cellStyle+"'><div class='cell-stack' style='align-items:center; font-weight:bold; font-size:12px; color:#444;'>" + tVal + "</div></td>";
     }
     
-    // 2. 達成率・率
+    // 2. 達成率・率の計算ロジックを修正
     else if(r.type === "total_ratio" || r.type === "del_total_ratio") {
-        var act = (s[r.n+"_k"] || 0) + (s[r.n+"_f"] || 0), bud = s[r.d] || 0;
-        tVal = bud > 0 ? Math.round((act / bud) * 100) + "%" : "0%";
-        return "<td class='"+c+"' style='"+cellStyle+"'><div class='cell-stack' style='align-items:center; font-weight:bold; font-size:12px;'>" + tVal + "</div></td>";
+    var act = 0;
+    // ★ 修正：粗利達成率（金額）と台数達成率を切り分け
+    if(r.n === "del_ar25") {
+        act = (s.del_ar25_k || 0) + (s.del_ar25_f || 0); // 金額合計
+    } else {
+        act = (s[r.n+"_k"] || 0) + (s[r.n+"_f"] || 0);   // 台数合計
+    }
+    var bud = s[r.d] || 0;
+    tVal = bud > 0 ? Math.round((act / bud) * 100) + "%" : "0%";
+    return "<td class='"+c+"' style='"+cellStyle+"'><div class='cell-stack' style='align-items:center; font-weight:bold; font-size:12px;'>" + tVal + "</div></td>";
     }
 
     if(r.m === "empty") {
