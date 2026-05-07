@@ -235,11 +235,11 @@ function renderCell(s, r, isT) {
     // 2. 達成率・率の計算ロジックを修正
     else if(r.type === "total_ratio" || r.type === "del_total_ratio") {
     var act = 0;
-    // ★ 修正：粗利達成率（金額）と台数達成率を切り分け
+    // 総粗利の達成率（del_ar25）の場合だけ、金額で集計する
     if(r.n === "del_ar25") {
-        act = (s.del_ar25_k || 0) + (s.del_ar25_f || 0); // 金額合計
+        act = (s.del_ar25_k || 0) + (s.del_ar25_f || 0);
     } else {
-        act = (s[r.n+"_k"] || 0) + (s[r.n+"_f"] || 0);   // 台数合計
+        act = (s[r.n+"_k"] || 0) + (s[r.n+"_f"] || 0);
     }
     var bud = s[r.d] || 0;
     tVal = bud > 0 ? Math.round((act / bud) * 100) + "%" : "0%";
