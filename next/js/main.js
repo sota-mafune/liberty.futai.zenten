@@ -71,17 +71,23 @@ var loadFailed = false; // 直近の読み込みが失敗したら true（フィ
 function isStale(seq) { return seq !== fetchSeq; }
 
 // COQL を全ページ読む。失敗したら例外を投げる（握りつぶさない）。新しい呼び出しが始まったら null を返して打ち切る
+// 1回で読む件数。COQL の上限 2000 件で読み、通らなければ 200 件に落とす
+var COQL_PAGE = 2000;
 async function fetchServices(where, seq) {
     var out = [], offset = 0;
     while (true) {
-        var res = await ZOHO.CRM.API.coql({ "select_query": "select " + SELECT_FIELDS + " from Services where " + where + " limit " + offset + ", 200" });
+        var res, err = null;
+        try { res = await ZOHO.CRM.API.coql({ "select_query": "select " + SELECT_FIELDS + " from Services where " + where + " limit " + offset + ", " + COQL_PAGE }); } catch (e) { err = e; }
         if (isStale(seq)) return null;
-        if (res && Array.isArray(res.data)) {
+        if (!err && res && Array.isArray(res.data)) {
             out = out.concat(res.data);
-            if (res.info && res.info.more_records) { offset += 200; continue; }
+            if (res.info && res.info.more_records) { offset += COQL_PAGE; continue; }
             break;
         }
-        if (res && typeof res === "object" && (res.code || res.status === "error" || res.message)) throw new Error(res.code || res.message || "COQL error");
+        var bad = err || (res && typeof res === "object" && (res.code || res.status === "error" || res.message));
+        if (bad && COQL_PAGE > 200 && offset === 0) { COQL_PAGE = 200; continue; } // 2000 件が通らない版の API なら 200 件で読み直す
+        if (err) throw err;
+        if (bad) throw new Error(res.code || res.message || "COQL error");
         break; // 0件
     }
     return out;
@@ -101,18 +107,22 @@ async function fetchByCOQL() {
     // 成約日・来店日・納車日のどれかが期間内のもの
     var where = "(((ClosingDay between '" + p.start + "' and '" + p.end + "') or (VisitedDateTime between '" + p.start + "T00:00:00+09:00' and '" + p.end + "T23:59:59+09:00')) or (nousyayoteibi between '" + p.start + "T00:00:00+09:00' and '" + p.end + "T23:59:59+09:00'))";
     // 読み終えるまでは手元の変数に持ち、最新の呼び出しのときだけ allData / lyData に入れる
-    var cur = [], ly = [], lyOk = false;
+    var cur = [], ly = [], lyOk = false, budget = null;
+    // 今年分・昨年分・予算は互いに関係ないので同時に読む
+    var budgetP = fetchAnalyticsBudgets();
     try {
-        cur = await fetchServices(where, seq);
-        if (cur === null || isStale(seq)) return;
         // 昨年分は前年の期間が CRM のデータの開始日以降のときだけ読む
-        if (p.lyFetchStart && p.lyFetchStart >= CRM_DATA_START) {
+        var wantLy = !!(p.lyFetchStart && p.lyFetchStart >= CRM_DATA_START);
+        var lyP = Promise.resolve([]);
+        if (wantLy) {
             loadingEl.innerHTML += "<br>▶ 昨年の実績を取得中...";
             var lyWhere = "((ClosingDay between '" + p.lyFetchStart + "' and '" + p.lyFetchEnd + "') or (VisitedDateTime between '" + p.lyFetchStart + "T00:00:00+09:00' and '" + p.lyFetchEnd + "T23:59:59+09:00'))";
-            ly = await fetchServices(lyWhere, seq);
-            if (ly === null || isStale(seq)) return;
-            lyOk = true;
+            lyP = fetchServices(lyWhere, seq);
         }
+        var got = await Promise.all([fetchServices(where, seq), lyP]);
+        cur = got[0]; ly = got[1];
+        if (cur === null || ly === null || isStale(seq)) return;
+        lyOk = wantLy;
     } catch (e) {
         if (isStale(seq)) return;
         console.error("COQL 取得エラー:", e);
@@ -125,9 +135,8 @@ async function fetchByCOQL() {
         return;
     }
 
-    await resolveMastersNames(cur.concat(ly));
-    if (isStale(seq)) return;
-    var budget = await fetchAnalyticsBudgets();
+    var both = await Promise.all([resolveMastersNames(cur.concat(ly)), budgetP]);
+    budget = both[1];
     if (isStale(seq)) return;
 
     allData = cur; lyData = ly; lyAvailable = lyOk; budgetDataGlobal = budget;
@@ -400,8 +409,6 @@ function fmtPct(n, d) { return (Math.round(n / d * 1000) / 10).toFixed(1) + "%";
 function pct(n, d) { return d ? fmtPct(n, d) : "0.0%"; }
 function pctDash(n, d) { return d ? fmtPct(n, d) : "-"; }
 function sumKeys(s, keys, suf) { var t = 0; keys.forEach(function(k) { t += (s[k + suf] || 0); }); return t; }
-// 総粗利の軽/普の段は幅に収まるよう万円単位
-function man(v) { return Math.round(v / 10000).toLocaleString() + "万"; }
 
 function singleCell(c, cellStyle, val, extra) {
     return "<td class='"+c+"' style='"+cellStyle+"'><div class='cell-stack' style='align-items:center; font-weight:bold; font-size:12px;" + (extra || "") + "'>" + val + "</div></td>";
@@ -465,7 +472,7 @@ function renderCell(s, r, isT) {
         else if(r.type.endsWith("_sum")) {
             var kS = Math.round(s[r.val+"_k"] || 0), fS = Math.round(s[r.val+"_f"] || 0);
             tVal = (kS + fS).toLocaleString();
-            kVal = man(kS); fVal = man(fS);
+            kVal = kS.toLocaleString(); fVal = fS.toLocaleString();
         }
 
         var lowerBg = isDel ? "background:#ffffff !important;" : "background:transparent !important;";
