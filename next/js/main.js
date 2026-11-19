@@ -238,22 +238,31 @@ var DAILY_SELECT = "id, Name, BudgetType, BudgetStore, BudgetMonth, TargetDate, 
 function isMonthBudgetRow(b) { var t = b && b.BudgetType; return t === null || t === undefined || t === "" || t === "-None-" || t === BT_MONTH; }
 // その月（"YYYY-MM"）の月予算の行。店舗を渡せばその店舗だけ。読めなければ例外
 // 種別の条件が通らなければ、種別なしで読んで手元で月予算だけに分ける
+// COQL の where は、条件を3つ以上つなぐときは2つずつ括弧でくくる（((A and B) and C)。そうしないと SYNTAX_ERROR）
+// 渡す条件のうち or を含むものは、呼ぶ側で括弧に入れて1項にしておく
+function coqlAnd(conds) {
+    var list = conds.filter(function(c) { return !!c; });
+    if (list.length === 0) return "";
+    var w = list[0];
+    for (var i = 1; i < list.length; i++) w = "(" + w + " and " + list[i] + ")";
+    return w;
+}
 async function querySalesBudgets(month, store) {
-    var base = "BudgetMonth = '" + coqlStr(month) + "-01'" + (store ? " and BudgetStore = '" + coqlStr(store) + "'" : "");
-    try { return (await fetchServices(base + " and (BudgetType is null or BudgetType = '" + BT_MONTH + "')", null, "SalesBudgets", BUDGET_FIELDS + ", BudgetType")).filter(isMonthBudgetRow); }
+    var cMonth = "BudgetMonth = '" + coqlStr(month) + "-01'", cStore = store ? "BudgetStore = '" + coqlStr(store) + "'" : null;
+    try { return (await fetchServices(coqlAnd([cMonth, cStore, "(BudgetType is null or BudgetType = '" + BT_MONTH + "')"]), null, "SalesBudgets", BUDGET_FIELDS + ", BudgetType")).filter(isMonthBudgetRow); }
     catch (e) {
         console.error("月予算の種別つきの読み込みが通らないので、全件を読んで分けます:", e);
-        return (await fetchServices(base, null, "SalesBudgets", BUDGET_FIELDS + ", BudgetType")).filter(isMonthBudgetRow);
+        return (await fetchServices(coqlAnd([cMonth, cStore]), null, "SalesBudgets", BUDGET_FIELDS + ", BudgetType")).filter(isMonthBudgetRow);
     }
 }
 // 曜日の重みの行（適用開始月が month 以前のもの。店舗を渡せばその店舗だけ）
 async function queryWeightRows(month, store) {
-    var where = "BudgetType = '" + BT_WEIGHT + "' and BudgetMonth <= '" + coqlStr(month) + "-01'" + (store ? " and BudgetStore = '" + coqlStr(store) + "'" : "");
+    var where = coqlAnd(["BudgetType = '" + BT_WEIGHT + "'", "BudgetMonth <= '" + coqlStr(month) + "-01'", store ? "BudgetStore = '" + coqlStr(store) + "'" : null]);
     return await fetchServices(where, null, "SalesBudgets", WEIGHT_SELECT);
 }
 // 日別予算の行（その月。店舗を渡せばその店舗だけ）
 async function queryDailyRows(month, store) {
-    var where = "BudgetType = '" + BT_DAILY + "' and BudgetMonth = '" + coqlStr(month) + "-01'" + (store ? " and BudgetStore = '" + coqlStr(store) + "'" : "");
+    var where = coqlAnd(["BudgetType = '" + BT_DAILY + "'", "BudgetMonth = '" + coqlStr(month) + "-01'", store ? "BudgetStore = '" + coqlStr(store) + "'" : null]);
     return await fetchServices(where, null, "SalesBudgets", DAILY_SELECT);
 }
 // 表の読み込み用。月予算が読めなければ null（予算の行は「未登録」）。重み・日別が読めなければ空（共通の重みで割る）
