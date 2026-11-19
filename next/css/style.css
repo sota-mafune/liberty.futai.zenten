@@ -97,6 +97,18 @@ td.bud-cell:hover { filter: brightness(0.92); }
 .daily-bar .tab-btn { padding: 3px 10px; }
 #bi-status { font-weight: normal; margin-right: 10px; }
 #bi-info { font-weight: bold; color: #2c3e50; }
+/* 曜日の重み・日別の予算（予算入力の下） */
+#bi-plan { padding-bottom: 20px; }
+.bi-sec-title { margin: 14px 0 4px 6px; font-weight: bold; font-size: 11px; color: #2c3e50; }
+.bi-sec-title .tab-btn { margin-left: 10px; padding: 2px 8px; font-size: 10px; }
+.bi-sec-sub { margin-left: 8px; font-weight: normal; font-size: 10px; color: #666; }
+.bi-note2 { margin: 3px 0 0 6px; font-size: 10px; color: #888; }
+.bi-warn { margin: 3px 0 4px 6px; font-size: 11px; font-weight: bold; color: #c62828; }
+.bi-table input.bi-input-x { width: 100%; box-sizing: border-box; font-size: 10px; font-weight: bold; text-align: right; font-family: inherit; padding: 2px 4px; border: 1px solid #d0d7de; border-radius: 3px; background: #fff; }
+.bi-table input.bi-input-x:focus { outline: none; border-color: #5b8fd6; }
+.bi-table input.bi-input-x:disabled { background: #f2f2f2; color: #777; }
+.bi-d-table tr.bi-manual td { background: #fff2cc; }
+.bi-hol { margin-left: 3px; font-size: 8px; color: #c00000; }
 .my-store-mark { font-size: 9px; color: #ffd966; margin-right: 2px; }
 /* 担当者を追加（候補の小窓） */
 .bi-add-wrap { position: relative; display: inline-block; margin-left: 6px; }

@@ -200,16 +200,98 @@ async function resolveMastersNames(all) {
 // ===== 予算・目標（CRM のモジュール「販売予算」SalesBudgets。1か月×店舗×担当者で1件、担当者が空なら店舗全体の行） =====
 var BUDGET_FIELDS = "id, Name, BudgetMonth, BudgetStore, BudgetStaff, BudgetStaff.Name, BudgetKei, BudgetFu, TargetKei, TargetFu, DeliveryBudget, GrossProfitBudget";
 function coqlStr(v) { return String(v === null || v === undefined ? "" : v).replace(/\\/g, "\\\\").replace(/'/g, "\\'"); }
-// その月（"YYYY-MM"）の予算の行。店舗を渡せばその店舗だけ。読めなければ例外
+// 同じモジュールに3種類: 月予算（BudgetType が空か「月予算」）/ 曜日の重み（1件＝1店舗、BudgetMonth＝適用開始月）/ 日別予算（1件＝1店舗×1日）
+var BT_MONTH = "月予算", BT_WEIGHT = "曜日の重み", BT_DAILY = "日別予算";
+var WEIGHT_FIELDS_LIST = ["WeightMon", "WeightTue", "WeightWed", "WeightThu", "WeightFri", "WeightSat", "WeightSun", "WeightHoliday"];
+var WEIGHT_LABELS = ["月", "火", "水", "木", "金", "土", "日", "祝日"];
+var WEIGHT_SELECT = "id, Name, BudgetType, BudgetStore, BudgetMonth, " + WEIGHT_FIELDS_LIST.join(", ");
+var DAILY_SELECT = "id, Name, BudgetType, BudgetStore, BudgetMonth, TargetDate, DailyBudget";
+function isMonthBudgetRow(b) { var t = b && b.BudgetType; return t === null || t === undefined || t === "" || t === "-None-" || t === BT_MONTH; }
+// その月（"YYYY-MM"）の月予算の行。店舗を渡せばその店舗だけ。読めなければ例外
+// 種別の条件が通らなければ、種別なしで読んで手元で月予算だけに分ける
 async function querySalesBudgets(month, store) {
-    var where = "BudgetMonth = '" + coqlStr(month) + "-01'" + (store ? " and BudgetStore = '" + coqlStr(store) + "'" : "");
-    return await fetchServices(where, null, "SalesBudgets", BUDGET_FIELDS);
+    var base = "BudgetMonth = '" + coqlStr(month) + "-01'" + (store ? " and BudgetStore = '" + coqlStr(store) + "'" : "");
+    try { return (await fetchServices(base + " and (BudgetType is null or BudgetType = '" + BT_MONTH + "')", null, "SalesBudgets", BUDGET_FIELDS + ", BudgetType")).filter(isMonthBudgetRow); }
+    catch (e) {
+        console.error("月予算の種別つきの読み込みが通らないので、全件を読んで分けます:", e);
+        return (await fetchServices(base, null, "SalesBudgets", BUDGET_FIELDS + ", BudgetType")).filter(isMonthBudgetRow);
+    }
 }
-// 表の読み込み用。読めなければ null（予算の行は「未登録」になる）
+// 曜日の重みの行（適用開始月が month 以前のもの。店舗を渡せばその店舗だけ）
+async function queryWeightRows(month, store) {
+    var where = "BudgetType = '" + BT_WEIGHT + "' and BudgetMonth <= '" + coqlStr(month) + "-01'" + (store ? " and BudgetStore = '" + coqlStr(store) + "'" : "");
+    return await fetchServices(where, null, "SalesBudgets", WEIGHT_SELECT);
+}
+// 日別予算の行（その月。店舗を渡せばその店舗だけ）
+async function queryDailyRows(month, store) {
+    var where = "BudgetType = '" + BT_DAILY + "' and BudgetMonth = '" + coqlStr(month) + "-01'" + (store ? " and BudgetStore = '" + coqlStr(store) + "'" : "");
+    return await fetchServices(where, null, "SalesBudgets", DAILY_SELECT);
+}
+// 表の読み込み用。月予算が読めなければ null（予算の行は「未登録」）。重み・日別が読めなければ空（共通の重みで割る）
 async function fetchSalesBudgets(month) {
     if (!month) return null;
-    try { return { month: month, rows: await querySalesBudgets(month, null) }; }
+    try {
+        var got = await Promise.all([
+            querySalesBudgets(month, null),
+            queryWeightRows(month, null).catch(function(e) { console.error("曜日の重みの取得エラー（共通の重みで割ります）:", e); return []; }),
+            queryDailyRows(month, null).catch(function(e) { console.error("日別予算の取得エラー（手入力なしで割ります）:", e); return []; })
+        ]);
+        return { month: month, rows: got[0], weights: got[1], daily: got[2] };
+    }
     catch (e) { console.error("予算（販売予算）の取得エラー:", e); return null; }
+}
+
+// ===== 日割り（店舗ごと） =====
+// その店舗でその月に効く重みの行（BudgetMonth ≤ その月 の中で一番新しい行）。無ければ null（＝全店共通の重み）
+function budWeightRowFor(weights, store, month) {
+    var best = null, m1 = month + "-01";
+    (weights || []).forEach(function(w) {
+        if ((w.BudgetStore || "未所属") !== (store || "未所属")) return;
+        var bm = String(w.BudgetMonth || "").slice(0, 10);
+        if (!bm || bm > m1) return;
+        if (!best || bm > String(best.BudgetMonth).slice(0, 10) || (bm === String(best.BudgetMonth).slice(0, 10) && String(w.id) > String(best.id))) best = w;
+    });
+    return best;
+}
+// 重みの行（無ければ共通）でのその日の重み。行の空の曜日は 0
+function budDayWeightBy(ds, wrow) {
+    if (!wrow) return budDayWeight(ds);
+    var p = ds.split("-").map(Number), dow = new Date(Date.UTC(p[0], p[1] - 1, p[2])).getUTCDay();
+    var f = JP_HOLIDAYS.indexOf(ds) !== -1 ? "WeightHoliday" : ["WeightSun", "WeightMon", "WeightTue", "WeightWed", "WeightThu", "WeightFri", "WeightSat"][dow];
+    return budInt(wrow[f]);
+}
+// 1店舗の日割り。M = 月予算（軽+普）、manual = { 日: 整数 }（手入力の日）。exact = 日ごとの値（小数）
+function budPlan(month, M, wrow, manual) {
+    var days = budMonthWeights(month).days, exact = {}, isManual = {}, O = 0, W = 0;
+    days.forEach(function(d) { if (manual && manual[d] !== undefined && manual[d] !== null) { isManual[d] = true; O += manual[d]; } else W += budDayWeightBy(d, wrow); });
+    var rest = M - O;
+    days.forEach(function(d) { exact[d] = isManual[d] ? manual[d] : ((rest > 0 && W > 0) ? rest * budDayWeightBy(d, wrow) / W : 0); });
+    return { days: days, exact: exact, manual: isManual, M: M, O: O, over: rest < 0 ? -rest : 0 };
+}
+// 表の予算データから、店舗ごとの日割りを作る { 店舗: plan }。月予算・日別予算のどちらかがある店舗だけ
+function budStorePlans(bd) {
+    var out = {};
+    if (!bd || !Array.isArray(bd.rows)) return out;
+    var M = {}, man = {}, rowsN = {};
+    bd.rows.forEach(function(b) { var st = b.BudgetStore || "未所属"; M[st] = (M[st] || 0) + budInt(b.BudgetKei) + budInt(b.BudgetFu); rowsN[st] = (rowsN[st] || 0) + 1; });
+    (bd.daily || []).forEach(function(b) {
+        var st = b.BudgetStore || "未所属", d = String(b.TargetDate || "").slice(0, 10);
+        if (d.slice(0, 7) !== bd.month || b.DailyBudget === null || b.DailyBudget === undefined || b.DailyBudget === "") return;
+        (man[st] = man[st] || {})[d] = Math.round(budInt(b.DailyBudget)); rowsN[st] = (rowsN[st] || 0) + 1;
+    });
+    Object.keys(rowsN).forEach(function(st) { var p = budPlan(bd.month, M[st] || 0, budWeightRowFor(bd.weights, st, bd.month), man[st] || {}); p.rowCount = rowsN[st]; out[st] = p; });
+    return out;
+}
+// 複数の店舗の日割りを足して、表示の整数にする。手入力の日はその整数、残りは累計を四捨五入して配る
+function budScopeDisp(plans, days) {
+    var disp = {}, autoCum = 0, prev = 0;
+    days.forEach(function(d) {
+        var man = 0, auto = 0;
+        plans.forEach(function(p) { if (p.manual[d]) man += p.exact[d]; else auto += p.exact[d] || 0; });
+        autoCum += auto; var r = Math.round(autoCum);
+        disp[d] = man + (r - prev); prev = r;
+    });
+    return disp;
 }
 function budInt(v) { var n = parseFloat(v); return isNaN(n) ? 0 : n; }
 function budStaffId(b) { var s = b && b.BudgetStaff; var id = s && typeof s === "object" ? s.id : s; return id ? String(id) : null; }
@@ -383,7 +465,6 @@ function renderAll(seq) {
     // 予算・目標（販売予算）。担当者は id で照合し、名前は personMap（接客の担当者と同じ表記）から引いて staffKey に通す
     // 担当者が空の行は店舗・グループ・合計にだけ入る
     if (budgetDataGlobal && budgetDataGlobal.month === curRange.month && Array.isArray(budgetDataGlobal.rows)) {
-        var storeMonthBud = {}, storeBudRows = {};
         budgetDataGlobal.rows.forEach(function(b) {
             var st = b.BudgetStore || "未所属", nm = budStaffName(b);
             var bk = budInt(b.BudgetKei), bf = budInt(b.BudgetFu), tk = budInt(b.TargetKei), tf = budInt(b.TargetFu), bn = budInt(b.DeliveryBudget), bar = budInt(b.GrossProfitBudget);
@@ -392,13 +473,13 @@ function renderAll(seq) {
                 s.budget_t += tk + tf; s.budget_t_k += tk; s.budget_t_f += tf;
                 s.budget_n += bn; s.budget_ar += bar; s.budget_rows++;
             });
-            storeMonthBud[st] = (storeMonthBud[st] || 0) + bk + bf;
-            storeBudRows[st] = (storeBudRows[st] || 0) + 1;
         });
-        // 現時点予算: 店舗の月予算を曜日・祝日の重みで日に割り、今月は今日まで・過去の月は月の合計・未来の月は 0（担当者の列には入れない）
-        var curFrac = budCurFrac(curRange.month, curRange.today);
-        Object.keys(storeBudRows).forEach(function(st) {
-            bucketsFor(st, null, "budget").forEach(function(s) { s.budget_current += storeMonthBud[st] * curFrac; s.daily_rows += storeBudRows[st]; });
+        // 現時点予算: 店舗ごとの日割り（手入力の日はその値、残りを店舗の曜日の重みで）の今日までの合計（担当者の列には入れない）
+        var plans = budStorePlans(budgetDataGlobal);
+        Object.keys(plans).forEach(function(st) {
+            var p = plans[st], cur = 0;
+            p.days.forEach(function(d) { if (d <= curRange.today) cur += p.exact[d]; });
+            bucketsFor(st, null, "budget").forEach(function(s) { s.budget_current += cur; s.daily_rows += p.rowCount; });
         });
     }
 
@@ -691,17 +772,13 @@ function dailyBudget(f) {
     var out = { ok: false, month: null, monthTotal: 0, rows: 0, exact: {}, disp: {} };
     if (!budgetDataGlobal || !Array.isArray(budgetDataGlobal.rows) || !budgetDataGlobal.month) return out;
     out.month = budgetDataGlobal.month;
-    budgetDataGlobal.rows.forEach(function(b) {
-        if (!dailyInScope(b.BudgetStore, f)) return;
-        out.rows++; out.monthTotal += budInt(b.BudgetKei) + budInt(b.BudgetFu);
-    });
+    // 店舗ごとの日割り（手入力の日・店舗の曜日の重み）を、絞り込み範囲の店舗だけ足す
+    var all = budStorePlans(budgetDataGlobal), plans = [];
+    Object.keys(all).forEach(function(st) { if (!dailyInScope(st, f)) return; plans.push(all[st]); out.rows += all[st].rowCount; out.monthTotal += all[st].M; });
     out.ok = out.rows > 0;
-    var mw = budMonthWeights(out.month), cum = 0, prev = 0;
-    mw.days.forEach(function(d) {
-        var x = mw.total ? out.monthTotal * mw.w[d] / mw.total : 0;
-        out.exact[d] = x; cum += x;
-        var r = Math.round(cum); out.disp[d] = r - prev; prev = r;
-    });
+    var days = budMonthWeights(out.month).days;
+    days.forEach(function(d) { var x = 0; plans.forEach(function(p) { x += p.exact[d]; }); out.exact[d] = x; });
+    out.disp = budScopeDisp(plans, days);
     return out;
 }
 
@@ -919,13 +996,17 @@ async function biLoad() {
     biInfo("");
     biStatus("担当者を読み込み中…", "");
     box.innerHTML = "";
-    var budRows = null, staff = null, errs = [];
+    var budRows = null, staff = null, errs = [], planErr = null;
     var got = await Promise.all([
         querySalesBudgets(month, store).catch(function(e) { errs.push("予算の読み込みに失敗しました（" + ((e && (e.message || e.code)) || e) + "）"); return null; }),
-        biStaffFromServices(month, store).catch(function(e) { errs.push("担当者の読み込みに失敗しました（" + ((e && (e.message || e.code)) || e) + "）"); return null; })
+        biStaffFromServices(month, store).catch(function(e) { errs.push("担当者の読み込みに失敗しました（" + ((e && (e.message || e.code)) || e) + "）"); return null; }),
+        queryWeightRows(month, store).catch(function(e) { planErr = "曜日の重みを読めませんでした（" + ((e && (e.message || e.code)) || e) + "）"; return null; }),
+        queryDailyRows(month, store).catch(function(e) { planErr = "日別の予算を読めませんでした（" + ((e && (e.message || e.code)) || e) + "）"; return null; })
     ]);
     if (seq !== biState.seq) return;
     budRows = got[0]; staff = got[1];
+    biState.weights = got[2] || []; biState.daily = got[3] || []; biState.planErr = planErr;
+    biState.wChain = Promise.resolve(); biState.dChain = Promise.resolve(); biState.busyKeys = {};
     if (budRows === null) { biStatus(errs.join(" ／ "), "err"); return; } // 予算が読めないまま入れると重複して作るので、表を出さない
 
     var rows = [], byStaff = {}, storeRow = null;
@@ -971,7 +1052,7 @@ function biRender() {
     });
     h += "<tr class='daily-total'><td class='sticky-col-item'>合計</td>";
     BI_COLS.forEach(function(c, ci) { h += "<td><div class='daily-val' data-total='" + ci + "'></div></td>"; });
-    h += "</tr></tbody></table>";
+    h += "</tr></tbody></table><div id='bi-plan'></div>";
     box.innerHTML = h;
     box.querySelectorAll("input.bi-input").forEach(function(el) {
         el.addEventListener("keydown", function(e) {
@@ -990,6 +1071,170 @@ function biTotals() {
         var el = document.querySelector("#budget-table-container [data-total='" + ci + "']");
         if (el) el.textContent = any ? Math.round(t).toLocaleString() : "";
     });
+    biRenderPlan(); // 月予算が変わると日別の自動の値も変わる
+}
+
+// ===== 曜日の重み（この店舗）と 日別の予算（この店舗・この月） =====
+var WEIGHT_DEFAULT = { WeightMon: 57, WeightTue: 50, WeightWed: 5, WeightThu: 49, WeightFri: 55, WeightSat: 168, WeightSun: 186, WeightHoliday: BUD_HOLIDAY_WEIGHT };
+function biMonthM() { var M = 0; (biState.rows || []).forEach(function(r) { if (r.rec) M += budInt(r.rec.BudgetKei) + budInt(r.rec.BudgetFu); }); return M; }
+function biManualMap() { var m = {}; (biState.daily || []).forEach(function(b) { var d = String(b.TargetDate || "").slice(0, 10); if (d && b.DailyBudget !== null && b.DailyBudget !== undefined && b.DailyBudget !== "") m[d] = Math.round(budInt(b.DailyBudget)); }); return m; }
+function biDailyRow(d) { var x = null; (biState.daily || []).forEach(function(b) { if (String(b.TargetDate || "").slice(0, 10) === d) x = b; }); return x; }
+function biRenderPlan() {
+    var box = document.getElementById("bi-plan");
+    if (!box || !biState.month || !biState.store) return;
+    if (biState.planErr) { box.innerHTML = "<div class='bi-sec-title'>曜日の重み・日別の予算</div><div class='bi-warn'>" + escHtml(biState.planErr) + "。重複して作らないよう、ここでは入力できません。開き直してください</div>"; return; }
+    // 入れかけの値とカーソルを保つ
+    var keep = {}, act = document.activeElement, actKey = act && act.getAttribute ? act.getAttribute("data-k") : null;
+    box.querySelectorAll("input[data-k]").forEach(function(el) { if (el.value !== (el.getAttribute("data-orig") || "")) keep[el.getAttribute("data-k")] = el.value; });
+    var month = biState.month, wrow = budWeightRowFor(biState.weights, biState.store, month), busy = biState.busyKeys || {};
+    var mLabel = month.replace("-", "/");
+    var src = wrow ? String(wrow.BudgetMonth).slice(0, 7).replace("-", "/") + " から適用" : "全店共通の重み（未設定）";
+    var h = "<div class='bi-sec-title'>曜日の重み（この店舗）<span class='bi-sec-sub'>" + escHtml(src) + "</span><button type='button' class='tab-btn' id='bi-w-reset'>全店共通に戻す</button></div>";
+    h += "<table class='daily-table bi-table bi-w-table'><thead><tr>" + WEIGHT_LABELS.map(function(l) { return "<th class='shop-header'>" + l + "</th>"; }).join("") + "</tr></thead><tbody><tr>";
+    WEIGHT_FIELDS_LIST.forEach(function(f) {
+        var v = wrow ? (wrow[f] === null || wrow[f] === undefined || wrow[f] === "" ? "0" : biValStr(wrow[f])) : String(WEIGHT_DEFAULT[f]);
+        h += "<td class='bi-td'><input type='text' inputmode='numeric' class='bi-input-x bi-w-input' data-k='w:" + f + "' data-f='" + f + "' data-orig='" + escHtml(v) + "' value='" + escHtml(v) + "'" + (busy["w:" + f] ? " disabled" : "") + " aria-label='重み " + escHtml(WEIGHT_LABELS[WEIGHT_FIELDS_LIST.indexOf(f)]) + "'></td>";
+    });
+    h += "</tr></tbody></table><div class='bi-note2'>定休日は 0 を入れてください。値を直して Enter で保存すると、" + escHtml(mLabel) + " から適用します（前の月の設定は残ります）</div>";
+
+    var M = biMonthM(), man = biManualMap(), plan = budPlan(month, M, wrow, man), disp = budScopeDisp([plan], plan.days);
+    h += "<div class='bi-sec-title'>日別の予算（この店舗・" + escHtml(mLabel) + "）<span class='bi-sec-sub'>月予算 " + M.toLocaleString() + "（成約予算 軽+普）を、手入力の日を除いて曜日の重みで割ります。手入力を空にすると自動に戻ります</span></div>";
+    if (plan.over > 0) h += "<div class='bi-warn'>手入力の日の合計が月予算を超えています（差 " + plan.over.toLocaleString() + "）。手入力でない日は 0 になります</div>";
+    h += "<table class='daily-table bi-table bi-d-table'><thead><tr><th class='shop-header'>日</th><th class='shop-header'>曜日</th><th class='shop-header'>重み</th><th class='shop-header'>自動</th><th class='shop-header'>手入力</th><th class='shop-header'>この日の予算</th></tr></thead><tbody>";
+    var tAuto = 0, tMan = 0, tAll = 0;
+    plan.days.forEach(function(d) {
+        var wd = dailyWd(d), wdCls = wd === 6 ? "daily-sat" : (wd === 0 ? "daily-sun" : ""), isM = !!plan.manual[d];
+        var mv = isM ? String(man[d]) : "";
+        if (isM) tMan += man[d]; else tAuto += disp[d];
+        tAll += disp[d];
+        h += "<tr" + (isM ? " class='bi-manual'" : "") + "><td class='" + wdCls + "'><div class='daily-val'>" + dailyMd(d) + (JP_HOLIDAYS.indexOf(d) !== -1 ? "<span class='bi-hol'>祝</span>" : "") + "</div></td><td class='" + wdCls + "'><div class='daily-val'>" + DAILY_WD[wd] + "</div></td>";
+        h += "<td><div class='daily-val'>" + budDayWeightBy(d, wrow) + "</div></td><td><div class='daily-val'>" + (isM ? "-" : disp[d].toLocaleString()) + "</div></td>";
+        h += "<td class='bi-td'><input type='text' inputmode='numeric' class='bi-input-x bi-d-input' data-k='d:" + d + "' data-day='" + d + "' data-orig='" + escHtml(mv) + "' value='" + escHtml(mv) + "'" + (busy["d:" + d] ? " disabled" : "") + " aria-label='" + d + " の日別予算'></td>";
+        h += "<td><div class='daily-val'>" + disp[d].toLocaleString() + "</div></td></tr>";
+    });
+    h += "<tr class='daily-total'><td><div class='daily-val'>合計</div></td><td></td><td></td><td><div class='daily-val'>" + tAuto.toLocaleString() + "</div></td><td><div class='daily-val'>" + tMan.toLocaleString() + "</div></td><td><div class='daily-val'>" + tAll.toLocaleString() + (tAll === M ? "" : "（月予算 " + M.toLocaleString() + "）") + "</div></td></tr>";
+    h += "</tbody></table>";
+    box.innerHTML = h;
+    box.querySelectorAll("input[data-k]").forEach(function(el) {
+        var k = el.getAttribute("data-k");
+        if (k in keep) el.value = keep[k];
+        var save = function(viaEnter) { return k.indexOf("w:") === 0 ? biSaveWeight(el, viaEnter) : biSaveDaily(el, viaEnter); };
+        el.addEventListener("keydown", function(e) {
+            if (e.key === "Enter") { e.preventDefault(); save(true); }
+            else if (e.key === "Escape" || e.key === "Esc") { e.preventDefault(); el.value = el.getAttribute("data-orig") || ""; }
+        });
+        el.addEventListener("blur", function() { save(false); });
+    });
+    var rb = document.getElementById("bi-w-reset");
+    if (rb) rb.addEventListener("click", biResetWeights);
+    if (actKey) { var f = box.querySelector("input[data-k='" + actKey + "']"); if (f && !f.disabled) { try { f.focus(); } catch (e) {} } }
+}
+function biErrMsg(x) { return ddErrText(x); }
+// 手元（予算入力と表の予算データ）の重み・日別の行を書き換え、表を作り直す
+function biApplyPlanGlobal(kind, rec, removed) {
+    var month = biState.month, bd = budgetDataGlobal;
+    if (bd && Array.isArray(bd.rows) && (kind === "w" ? month <= bd.month : month === bd.month)) {
+        var list = kind === "w" ? (bd.weights = bd.weights || []) : (bd.daily = bd.daily || []);
+        var i = -1; list.forEach(function(x, j) { if (String(x.id) === String(rec.id)) i = j; });
+        if (removed) { if (i !== -1) list.splice(i, 1); }
+        else if (i === -1) list.push(Object.assign({}, rec)); else Object.assign(list[i], rec);
+        var loadingEl = document.getElementById("loading");
+        if (!(loadingEl && loadingEl.style.display !== "none")) { try { renderAll(); } catch (e) { console.error("表の再計算エラー:", e); } }
+    }
+}
+// 重みを1つ保存する。この月の重みの行があれば更新、無ければ今効いている値（無ければ共通）を写して新しく作る
+function biSaveWeight(el, viaEnter, overrides) {
+    var f = el ? el.getAttribute("data-f") : null, k = el ? el.getAttribute("data-k") : "w:*";
+    if (el && (!el.isConnected || el.disabled || (biState.busyKeys || {})[k])) return Promise.resolve(false);
+    var vals = {};
+    if (!overrides) {
+        var v = biParse(el.value);
+        if (v === undefined || (v !== null && v < 0)) { biStatus("重みは 0 以上の整数で入れてください。保存していません", "err"); return Promise.resolve(false); }
+        if (v === null) v = 0; // 空は 0（定休日）
+        if (String(v) === (el.getAttribute("data-orig") || "")) { el.value = el.getAttribute("data-orig") || ""; return Promise.resolve(false); }
+        vals[f] = v;
+    } else vals = overrides;
+    var seq = biState.seq, month = biState.month, store = biState.store;
+    biState.busyKeys[k] = true; if (el) el.disabled = true;
+    biStatus("重みを保存しています…", "");
+    var p = biState.wChain.then(async function() {
+        var wrow = budWeightRowFor(biState.weights, store, month), res = null, err = null, rec = null;
+        var mine = wrow && String(wrow.BudgetMonth).slice(0, 7) === month;
+        try {
+            if (mine) {
+                var up = Object.assign({ id: wrow.id }, vals);
+                res = await ZOHO.CRM.API.updateRecord({ Entity: "SalesBudgets", APIData: up, Trigger: [] });
+            } else {
+                var ins = { Name: "重み " + month + " " + store, BudgetType: BT_WEIGHT, BudgetStore: store, BudgetMonth: month + "-01" };
+                WEIGHT_FIELDS_LIST.forEach(function(x) { ins[x] = wrow ? (wrow[x] === null || wrow[x] === undefined || wrow[x] === "" ? 0 : Math.round(budInt(wrow[x]))) : WEIGHT_DEFAULT[x]; });
+                Object.assign(ins, vals);
+                res = await ZOHO.CRM.API.insertRecord({ Entity: "SalesBudgets", APIData: ins, Trigger: [] });
+                rec = ins;
+            }
+        } catch (e) { err = e; }
+        var ok = !err && res && Array.isArray(res.data) && res.data[0] && res.data[0].code === "SUCCESS";
+        if (ok && !mine) { var nid = res.data[0].details && res.data[0].details.id; if (!nid) ok = false; else { rec = Object.assign({ id: String(nid) }, rec); if (seq === biState.seq) biState.weights.push(rec); } }
+        if (ok && mine) { Object.assign(wrow, vals); rec = wrow; }
+        if (seq === biState.seq) {
+            delete biState.busyKeys[k];
+            if (ok) biStatus("曜日の重みを保存しました（" + month.replace("-", "/") + " から適用）", "ok");
+            else { console.error("重みの保存エラー:", err || res); biStatus("重み: " + biErrMsg(err || res), "err"); }
+            biRenderPlan();
+            if (viaEnter && f) { var n = document.querySelector("#bi-plan input[data-k='" + k + "']"); if (n) n.focus(); }
+        }
+        if (ok) biApplyPlanGlobal("w", rec, false);
+        return ok;
+    });
+    biState.wChain = p.catch(function() {});
+    return p;
+}
+// 全店共通に戻す: 共通の値をこの月の重みの行に保存する（行は消さない）
+function biResetWeights() {
+    if (!biState.month || !biState.store) return;
+    if (!window.confirm("この店舗の曜日の重みを、" + biState.month.replace("-", "/") + " から全店共通の値（月57 火50 水5 木49 金55 土168 日186 祝125）にします。よろしいですか？")) return;
+    biSaveWeight(null, false, Object.assign({}, WEIGHT_DEFAULT));
+}
+// 日別予算を1日保存する。入れた → その日の行を作る／更新。空 → 行を消して自動に戻す（確認なし）
+function biSaveDaily(el, viaEnter) {
+    var d = el.getAttribute("data-day"), k = "d:" + d;
+    if (!el.isConnected || el.disabled || (biState.busyKeys || {})[k]) return Promise.resolve(false);
+    var v = biParse(el.value), orig = el.getAttribute("data-orig") || "";
+    if (v === undefined || (v !== null && v < 0)) { biStatus("日別の予算は 0 以上の整数で入れてください。保存していません", "err"); return Promise.resolve(false); }
+    var vs = v === null ? "" : String(v);
+    if (vs === orig) { el.value = orig; return Promise.resolve(false); }
+    var seq = biState.seq, month = biState.month, store = biState.store;
+    biState.busyKeys[k] = true; el.disabled = true;
+    biStatus("日別の予算を保存しています…", "");
+    var p = biState.dChain.then(async function() {
+        var cur = biDailyRow(d), res = null, err = null, rec = null, removed = false;
+        try {
+            if (v === null) {
+                if (cur) { res = await ZOHO.CRM.API.deleteRecord({ Entity: "SalesBudgets", RecordID: cur.id }); removed = true; rec = cur; }
+                else res = { data: [{ code: "SUCCESS" }] };
+            } else if (cur) {
+                res = await ZOHO.CRM.API.updateRecord({ Entity: "SalesBudgets", APIData: { id: cur.id, DailyBudget: v }, Trigger: [] });
+                rec = cur;
+            } else {
+                rec = { Name: "日別 " + d + " " + store, BudgetType: BT_DAILY, BudgetStore: store, TargetDate: d, BudgetMonth: month + "-01", DailyBudget: v };
+                res = await ZOHO.CRM.API.insertRecord({ Entity: "SalesBudgets", APIData: rec, Trigger: [] });
+            }
+        } catch (e) { err = e; }
+        var ok = !err && res && Array.isArray(res.data) && res.data[0] && res.data[0].code === "SUCCESS";
+        if (ok && v !== null && !cur) { var nid = res.data[0].details && res.data[0].details.id; if (!nid) ok = false; else { rec = Object.assign({ id: String(nid) }, rec); if (seq === biState.seq) biState.daily.push(rec); } }
+        if (ok && v !== null && cur) cur.DailyBudget = v;
+        if (ok && removed && seq === biState.seq) biState.daily = biState.daily.filter(function(x) { return x !== cur; });
+        if (seq === biState.seq) {
+            delete biState.busyKeys[k];
+            if (ok) biStatus(dailyMd(d) + " の日別予算を" + (v === null ? "自動に戻しました" : "保存しました"), "ok");
+            else { console.error("日別予算の保存エラー:", err || res); biStatus(dailyMd(d) + ": " + biErrMsg(err || res), "err"); }
+            biRenderPlan();
+            if (viaEnter) { var n = document.querySelector("#bi-plan input[data-k='" + k + "']"); if (n) n.focus(); }
+        }
+        if (ok && rec) biApplyPlanGlobal("d", rec, removed);
+        return ok;
+    });
+    biState.dChain = p.catch(function() {});
+    return p;
 }
 // 入力を数に。空は null、整数でなければ undefined
 function biParse(s) {
@@ -1018,7 +1263,7 @@ function biSaveCell(el, viaEnter) {
                 var up = { id: r.rec.id }; up[col.f] = v;
                 res = await ZOHO.CRM.API.updateRecord({ Entity: "SalesBudgets", APIData: up, Trigger: [] });
             } else {
-                var ins = { Name: biName(r), BudgetMonth: month + "-01", BudgetStore: store };
+                var ins = { Name: biName(r), BudgetMonth: month + "-01", BudgetStore: store, BudgetType: BT_MONTH };
                 if (r.staffId) ins.BudgetStaff = { id: r.staffId };
                 ins[col.f] = v;
                 res = await ZOHO.CRM.API.insertRecord({ Entity: "SalesBudgets", APIData: ins, Trigger: [] });
