@@ -88,6 +88,29 @@ td.dd-cell .val-kei:hover, td.dd-cell .val-fu:hover { text-decoration: underline
 .daily-table td.daily-ly { background: #d9d2e9; }
 .daily-table tr.daily-total td { background: #fff9e6; border-top: 2px solid #444; }
 .daily-table tr.daily-total td.daily-ly { background: #d9d2e9; }
+/* 予算のセル（押すと予算入力を開く） */
+td.bud-cell { cursor: pointer; }
+td.bud-cell:hover { filter: brightness(0.92); }
+
+/* 予算入力（既存の表と同じ幅・文字の大きさ） */
+#budget-table-container { height: calc(100vh - 100px); }
+.daily-bar .tab-btn { padding: 3px 10px; }
+#bi-status { font-weight: normal; margin-right: 10px; }
+#bi-status.bi-ok { color: #2e7d32; }
+#bi-status.bi-err { color: #c62828; }
+.bi-hint { font-weight: normal; color: #666; }
+.bi-table td.bi-name { white-space: normal; line-height: 1.3; padding: 3px 5px; }
+.bi-note { color: #888; font-weight: normal; font-size: 9px; }
+.bi-table td.bi-td { padding: 2px 3px; vertical-align: top; }
+.bi-table input.bi-input { width: 100%; box-sizing: border-box; font-size: 10px; font-weight: bold; text-align: right; font-family: inherit; padding: 2px 4px; border: 1px solid #d0d7de; border-radius: 3px; background: #fff; }
+.bi-table input.bi-input:focus { outline: none; border-color: #5b8fd6; }
+.bi-table input.bi-input:disabled { background: #f2f2f2; color: #777; }
+.bi-table .dd-ed-msg { font-size: 9px; color: #666; line-height: 1.3; white-space: normal; text-align: left; }
+.bi-table .dd-ed-msg:empty { display: none; }
+.bi-table .dd-ed-msg.dd-ed-ok { color: #2e7d32; }
+.bi-table .dd-ed-msg.dd-ed-err { color: #c62828; }
+.bi-table tr.daily-total td.sticky-col-item { background: #fff9e6; }
+
 td.dl-cell { cursor: pointer; }
 td.dl-cell:hover { filter: brightness(0.92); }
 

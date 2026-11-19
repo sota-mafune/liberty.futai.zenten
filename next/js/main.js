@@ -74,10 +74,11 @@ function isStale(seq) { return seq !== fetchSeq; }
 // ウィジェットの COQL は1回 200 件まで（2026-11-19 実測。2000 は通らない）。COQL_PAR 回分を同時に読む
 // ページの並びがずれないよう id 順で読み、id で重複を除く。order by が通らなければ外して読み直す
 var COQL_PAGE = 200, COQL_PAR = 4, COQL_ORDER = " order by id";
-async function coqlPage(where, offset) {
+// module / fields を省くと接客（Services）を SELECT_FIELDS で読む
+async function coqlPage(where, offset, module, fields) {
     for (var attempt = 0; attempt < 2; attempt++) {
         var res;
-        try { res = await ZOHO.CRM.API.coql({ "select_query": "select " + SELECT_FIELDS + " from Services where " + where + COQL_ORDER + " limit " + offset + ", " + COQL_PAGE }); }
+        try { res = await ZOHO.CRM.API.coql({ "select_query": "select " + (fields || SELECT_FIELDS) + " from " + (module || "Services") + " where " + where + COQL_ORDER + " limit " + offset + ", " + COQL_PAGE }); }
         catch (e) { if (COQL_ORDER && attempt === 0) { COQL_ORDER = ""; continue; } throw e; }
         if (res && Array.isArray(res.data)) return { rows: res.data, more: !!(res.info && res.info.more_records) };
         var bad = res && typeof res === "object" && (res.code || res.status === "error" || res.message);
@@ -86,13 +87,13 @@ async function coqlPage(where, offset) {
         throw new Error(res.code || res.message || "COQL error");
     }
 }
-async function fetchServices(where, seq) {
+async function fetchServices(where, seq, module, fields) {
     var out = [], seen = {}, offset = 0;
     while (true) {
         var offs = [];
         for (var i = 0; i < COQL_PAR; i++) offs.push(offset + i * COQL_PAGE);
-        var pages = await Promise.all(offs.map(function(o) { return coqlPage(where, o); }));
-        if (isStale(seq)) return null;
+        var pages = await Promise.all(offs.map(function(o) { return coqlPage(where, o, module, fields); }));
+        if (seq !== undefined && seq !== null && isStale(seq)) return null;
         var more = false;
         for (var j = 0; j < pages.length; j++) {
             pages[j].rows.forEach(function(r) { var k = r.id || JSON.stringify(r); if (!seen[k]) { seen[k] = true; out.push(r); } });
@@ -121,7 +122,7 @@ async function fetchByCOQL() {
     // 読み終えるまでは手元の変数に持ち、最新の呼び出しのときだけ allData / lyData に入れる
     var cur = [], ly = [], lyOk = false, budget = null;
     // 今年分・昨年分・予算は互いに関係ないので同時に読む
-    var budgetP = fetchAnalyticsBudgets();
+    var budgetP = fetchSalesBudgets(p.month);
     try {
         // 昨年分は前年の期間が CRM のデータの開始日以降のときだけ読む
         var wantLy = !!(p.lyFetchStart && p.lyFetchStart >= CRM_DATA_START);
@@ -167,19 +168,61 @@ async function resolveMastersNames(all) {
     }));
 }
 
-async function fetchAnalyticsBudgets() {
-    try {
-        const res = await ZOHO.CRM.FUNCTIONS.execute("get_dashboard_budgets", { arguments: JSON.stringify({}) });
-        if(res && res.code && res.code.toLowerCase() === "success" && res.details && res.details.output) {
-            return JSON.parse(res.details.output);
-        }
-    } catch(e) { console.error("❌ 予算データ取得エラー:", e); }
-    return null;
+// ===== 予算・目標（CRM のモジュール「販売予算」SalesBudgets。1か月×店舗×担当者で1件、担当者が空なら店舗全体の行） =====
+var BUDGET_FIELDS = "id, Name, BudgetMonth, BudgetStore, BudgetStaff, BudgetStaff.Name, BudgetKei, BudgetFu, TargetKei, TargetFu, DeliveryBudget, GrossProfitBudget";
+function coqlStr(v) { return String(v === null || v === undefined ? "" : v).replace(/\\/g, "\\\\").replace(/'/g, "\\'"); }
+// その月（"YYYY-MM"）の予算の行。店舗を渡せばその店舗だけ。読めなければ例外
+async function querySalesBudgets(month, store) {
+    var where = "BudgetMonth = '" + coqlStr(month) + "-01'" + (store ? " and BudgetStore = '" + coqlStr(store) + "'" : "");
+    return await fetchServices(where, null, "SalesBudgets", BUDGET_FIELDS);
+}
+// 表の読み込み用。読めなければ null（予算の行は「未登録」になる）
+async function fetchSalesBudgets(month) {
+    if (!month) return null;
+    try { return { month: month, rows: await querySalesBudgets(month, null) }; }
+    catch (e) { console.error("予算（販売予算）の取得エラー:", e); return null; }
+}
+function budInt(v) { var n = parseFloat(v); return isNaN(n) ? 0 : n; }
+function budStaffId(b) { var s = b && b.BudgetStaff; var id = s && typeof s === "object" ? s.id : s; return id ? String(id) : null; }
+function budStaffName(b) { var id = budStaffId(b); if (!id) return null; return personMap[id] || b["BudgetStaff.Name"] || (b.BudgetStaff && b.BudgetStaff.name) || ("ID:" + id); }
+
+// 日別予算の重み（シート 2025年9月の全店の日次予算の平均から）。日〜土、祝日は 125
+var BUD_WD_WEIGHT = [186, 57, 50, 5, 49, 55, 168];
+var BUD_HOLIDAY_WEIGHT = 125;
+// 日本の祝日 2025〜2027（振替休日・国民の休日を含む）
+var JP_HOLIDAYS = [
+    "2025-01-01", "2025-01-13", "2025-02-11", "2025-02-23", "2025-02-24", "2025-03-20", "2025-04-29", "2025-05-03", "2025-05-04", "2025-05-05", "2025-05-06",
+    "2025-07-21", "2025-08-11", "2025-09-15", "2025-09-23", "2025-10-13", "2025-11-03", "2025-11-23", "2025-11-24",
+    "2026-01-01", "2026-01-12", "2026-02-11", "2026-02-23", "2026-03-20", "2026-04-29", "2026-05-03", "2026-05-04", "2026-05-05", "2026-05-06",
+    "2026-07-20", "2026-08-11", "2026-09-21", "2026-09-22", "2026-09-23", "2026-10-12", "2026-11-03", "2026-11-23",
+    "2027-01-01", "2027-01-11", "2027-02-11", "2027-02-23", "2027-03-21", "2027-03-22", "2027-04-29", "2027-05-03", "2027-05-04", "2027-05-05",
+    "2027-07-19", "2027-08-11", "2027-09-20", "2027-09-23", "2027-10-11", "2027-11-03", "2027-11-23"
+];
+function budDayWeight(ds) {
+    if (JP_HOLIDAYS.indexOf(ds) !== -1) return BUD_HOLIDAY_WEIGHT;
+    var p = ds.split("-").map(Number);
+    return BUD_WD_WEIGHT[new Date(Date.UTC(p[0], p[1] - 1, p[2])).getUTCDay()];
+}
+// その月の日ごとの重みと合計。upto までの重みの合計も（今月の現時点予算用）
+function budMonthWeights(month) {
+    var days = [], w = {}, total = 0;
+    var last = parseInt(lastDayOfMonth(month).slice(8), 10);
+    for (var d = 1; d <= last; d++) { var ds = month + "-" + pad2(d); days.push(ds); w[ds] = budDayWeight(ds); total += w[ds]; }
+    return { days: days, w: w, total: total };
+}
+// 現時点予算の割合: 過去の月は 1、今月は今日までの重み ÷ 月の重み、未来の月は 0
+function budCurFrac(month, today) {
+    var tm = today.slice(0, 7);
+    if (month < tm) return 1;
+    if (month > tm) return 0;
+    var mw = budMonthWeights(month), s = 0;
+    mw.days.forEach(function(d) { if (d <= today) s += mw.w[d]; });
+    return mw.total ? s / mw.total : 0;
 }
 
 var STAT_BASES = ["j", "v_n", "sho", "ab", "jk", "rv", "rj", "tot_v", "n", "m", "c", "o2", "o3", "pk", "ct", "up", "tp", "ic", "rst", "ni", "nu", "hp", "fl", "aq", "tr", "ln", "l84", "r69", "r59", "r49", "r39", "r29", "low", "zn", "ar21", "ar22", "ar23", "ar24", "ar25", "ar_cnt", "del_cnt", "del_ar21", "del_ar22", "del_ar23", "del_ar24", "del_ar25", "ly_j", "ly_jt", "ly_vt"];
 // budget_rows: 月次予算の行数（0 なら「未登録」）、daily_rows: その月の日次予算の行数
-function createStats() { var s = { budget_n:0, budget_ar:0, budget_j:0, budget_current:0, budget_rows:0, daily_rows:0, g_sls:0 }; STAT_BASES.forEach(function(b) { s[b + "_k"] = 0; s[b + "_f"] = 0; }); s.__recs = {}; return s; }
+function createStats() { var s = { budget_n:0, budget_ar:0, budget_j:0, budget_j_k:0, budget_j_f:0, budget_t:0, budget_t_k:0, budget_t_f:0, budget_current:0, budget_rows:0, daily_rows:0, g_sls:0 }; STAT_BASES.forEach(function(b) { s[b + "_k"] = 0; s[b + "_f"] = 0; }); s.__recs = {}; return s; }
 
 // --- 数字の内訳（どの案件を数えたか）を覚える。数は変えず、足した案件の参照を持つだけ ---
 // s.__recs["j_k"] = Set(案件)。数の列（typeof number）だけを合算する処理には混ざらない
@@ -308,26 +351,26 @@ function renderAll(seq) {
 
     (allData || []).forEach(r => { bucketsFor(r.ServiceStore || "未所属", staffKey(personName(r)), "cur").forEach(s => aggregate(s, r)); });
 
-    if(budgetDataGlobal) {
-        var month = curRange.month, today = curRange.today, todayMonth = today.slice(0, 7);
-
-        if(budgetDataGlobal.sales_budget) {
-            budgetDataGlobal.sales_budget.forEach(b => {
-                if(normDate(b["月"]).slice(0, 7) !== month) return;
-                var val_j = parseInt(b["成約台数予算"]) || 0, val_n = parseInt(b["納車予算"]) || 0, val_ar = parseInt(b["粗利予算"]) || 0;
-                bucketsFor(b["店舗"] || "未所属", staffKey(b["担当者"]), "budget").forEach(s => { s.budget_j += val_j; s.budget_n += val_n; s.budget_ar += val_ar; s.budget_rows++; });
+    // 予算・目標（販売予算）。担当者は id で照合し、名前は personMap（接客の担当者と同じ表記）から引いて staffKey に通す
+    // 担当者が空の行は店舗・グループ・合計にだけ入る
+    if (budgetDataGlobal && budgetDataGlobal.month === curRange.month && Array.isArray(budgetDataGlobal.rows)) {
+        var storeMonthBud = {}, storeBudRows = {};
+        budgetDataGlobal.rows.forEach(function(b) {
+            var st = b.BudgetStore || "未所属", nm = budStaffName(b);
+            var bk = budInt(b.BudgetKei), bf = budInt(b.BudgetFu), tk = budInt(b.TargetKei), tf = budInt(b.TargetFu), bn = budInt(b.DeliveryBudget), bar = budInt(b.GrossProfitBudget);
+            bucketsFor(st, nm ? staffKey(nm) : null, "budget").forEach(function(s) {
+                s.budget_j += bk + bf; s.budget_j_k += bk; s.budget_j_f += bf;
+                s.budget_t += tk + tf; s.budget_t_k += tk; s.budget_t_f += tf;
+                s.budget_n += bn; s.budget_ar += bar; s.budget_rows++;
             });
-        }
-        if(budgetDataGlobal.daily_budget) {
-            budgetDataGlobal.daily_budget.forEach(b => {
-                var d = normDate(b["日"]);
-                if(d.slice(0, 7) !== month) return;
-                // 現時点予算: 今月は今日まで、過去の月は月の合計、未来の月は 0
-                var include = month < todayMonth ? true : (month === todayMonth ? d <= today : false);
-                var val_cur = include ? (parseInt(b["成約台数予算"]) || 0) : 0;
-                bucketsFor(b["店舗"] || "未所属", null, "budget").forEach(s => { s.budget_current += val_cur; s.daily_rows++; });
-            });
-        }
+            storeMonthBud[st] = (storeMonthBud[st] || 0) + bk + bf;
+            storeBudRows[st] = (storeBudRows[st] || 0) + 1;
+        });
+        // 現時点予算: 店舗の月予算を曜日・祝日の重みで日に割り、今月は今日まで・過去の月は月の合計・未来の月は 0（担当者の列には入れない）
+        var curFrac = budCurFrac(curRange.month, curRange.today);
+        Object.keys(storeBudRows).forEach(function(st) {
+            bucketsFor(st, null, "budget").forEach(function(s) { s.budget_current += storeMonthBud[st] * curFrac; s.daily_rows += storeBudRows[st]; });
+        });
     }
 
     // 昨年は列を作ったあとに足す（昨年だけの店舗・担当者の列は作らない）
@@ -366,8 +409,8 @@ function buildTable(sum, title, totalS, kind) {
     // d2: 2段目（合計）の分母（キーを足し合わせる）。無ければ d と同じ
     const rowDef = [
         { sec: "予算・目標" },
-        { lbl: "予算", m: "budget_j", type: "total_only", flag: "budget_rows", cls: "#ffffff" },
-        { lbl: "目標", type: "total_dash", cls: "#ffffff" },
+        { lbl: "予算", m: "budget_j", type: "budget_kf", flag: "budget_rows", cls: "#ffffff" },
+        { lbl: "目標", m: "budget_t", type: "budget_kf", flag: "budget_rows", cls: "#ffffff" },
         { lbl: "昨年実績", type: "ly_val", m: "ly_j", cls: "#ffffff" },
         { lbl: "現時点予算", m: "budget_current", type: "total_only", flag: "daily_rows", cls: "#ffffff" },
         { sec: "基本実績" },
@@ -434,8 +477,8 @@ function buildTable(sum, title, totalS, kind) {
             h += "</tr>";
         } else {
             h += "<tr><td class='sticky-col-item' style='background-color:"+(r.cls||"#fff")+"'>"+r.lbl+"</td>";
-            h += markCell(renderCell(totalS, r, true), totalS, r, kind, j, -1);
-            for(var k=0; k<keys.length; k++) h += markCell(renderCell(sum[keys[k]], r, false), sum[keys[k]], r, kind, j, k);
+            h += markBudCell(markCell(renderCell(totalS, r, true), totalS, r, kind, j, -1), r, kind, null);
+            for(var k=0; k<keys.length; k++) h += markBudCell(markCell(renderCell(sum[keys[k]], r, false), sum[keys[k]], r, kind, j, k), r, kind, keys[k]);
             h += "</tr>";
         }
     }
@@ -460,8 +503,14 @@ function renderCell(s, r, isT) {
 
     // 1. 予算・単一項目（予算の行が無ければ「未登録」）
     if(r.type === "total_only") {
-        tVal = (r.flag && !s[r.flag]) ? "未登録" : (s[r.m] || 0).toLocaleString();
+        tVal = (r.flag && !s[r.flag]) ? "未登録" : Math.round(s[r.m] || 0).toLocaleString(); // 現時点予算は日割りで端数が出るので四捨五入して出す
         return singleCell(c, cellStyle, tVal, " color:#444;");
+    }
+    // 予算・目標（軽/普の二段。行が無ければ「未登録」）
+    if(r.type === "budget_kf") {
+        if (r.flag && !s[r.flag]) return singleCell(c, cellStyle, "未登録", " color:#444;");
+        var bk = Math.round(s[r.m + "_k"] || 0), bf = Math.round(s[r.m + "_f"] || 0);
+        return twoTierCell(c, cellStyle, "", bk.toLocaleString(), bf.toLocaleString(), (bk + bf).toLocaleString());
     }
     if(r.type === "total_dash") return singleCell(c, cellStyle, "-", " color:#444;");
 
@@ -605,6 +654,25 @@ function dailyUpdateFilter() {
     return sel.value;
 }
 
+// 絞り込み範囲の日別予算。exact = 小数のまま、disp = 表示用の整数（累計を四捨五入した差で配るので、月の合計は月予算と一致する）
+function dailyBudget(f) {
+    var out = { ok: false, month: null, monthTotal: 0, rows: 0, exact: {}, disp: {} };
+    if (!budgetDataGlobal || !Array.isArray(budgetDataGlobal.rows) || !budgetDataGlobal.month) return out;
+    out.month = budgetDataGlobal.month;
+    budgetDataGlobal.rows.forEach(function(b) {
+        if (!dailyInScope(b.BudgetStore, f)) return;
+        out.rows++; out.monthTotal += budInt(b.BudgetKei) + budInt(b.BudgetFu);
+    });
+    out.ok = out.rows > 0;
+    var mw = budMonthWeights(out.month), cum = 0, prev = 0;
+    mw.days.forEach(function(d) {
+        var x = mw.total ? out.monthTotal * mw.w[d] / mw.total : 0;
+        out.exact[d] = x; cum += x;
+        var r = Math.round(cum); out.disp[d] = r - prev; prev = r;
+    });
+    return out;
+}
+
 function renderDaily() {
     var box = document.getElementById("daily-table-container");
     if (!box) return;
@@ -641,15 +709,10 @@ function renderDaily() {
         if (!isCancelled(rec)) (lyIdx[cD] || []).forEach(function(i) { sets.lyj[i].push(rec); });
     });
 
-    // 予算: その日・絞り込み範囲の店舗の日次予算（成約台数予算）。その月の行が1つも無ければ「未登録」
-    var bud = days.map(function() { return 0; }), monthRows = {};
-    if (budgetDataGlobal && budgetDataGlobal.daily_budget) budgetDataGlobal.daily_budget.forEach(function(b) {
-        var d = normDate(b["日"]);
-        if (!d || !dailyInScope(b["店舗"], f)) return;
-        monthRows[d.slice(0, 7)] = (monthRows[d.slice(0, 7)] || 0) + 1;
-        if (d in idx) bud[idx[d]] += (parseInt(b["成約台数予算"]) || 0);
-    });
-    var budOk = days.map(function(d) { return !!monthRows[d.slice(0, 7)]; });
+    // 予算: 絞り込み範囲の店舗の月の成約予算（軽+普）を、曜日・祝日の重みで日に割る（dailyBudget）
+    // 範囲に月予算の行が1つも無ければ「未登録」。読み込んだ月の外の日も「未登録」
+    var db = dailyBudget(f), bud = days.map(function(d) { return db.disp[d] || 0; });
+    var budOk = days.map(function(d) { return db.ok && d.slice(0, 7) === db.month; });
 
     var scopeLabel = f === "all" ? "全店" : f.slice(2);
     dailyCtx = { days: days, sets: sets, lyOk: lyOk, scopeLabel: scopeLabel };
@@ -721,6 +784,257 @@ document.addEventListener("click", function(e) {
     if (td) dailyOpen(td.getAttribute("data-daily"));
 });
 
+// ===== 予算入力（販売予算 SalesBudgets を店舗ごとに入れる） =====
+var BI_COLS = [
+    { f: "BudgetKei", lbl: "成約予算 軽" }, { f: "BudgetFu", lbl: "成約予算 普" },
+    { f: "TargetKei", lbl: "成約目標 軽" }, { f: "TargetFu", lbl: "成約目標 普" },
+    { f: "DeliveryBudget", lbl: "納車予算" }, { f: "GrossProfitBudget", lbl: "粗利予算（保証込）" }
+];
+var biState = { month: "", store: "", rows: [], seq: 0 };
+
+function biPrevMonth(m) { var p = m.split("-").map(Number); var y = p[0], mo = p[1] - 1; if (mo === 0) { y--; mo = 12; } return y + "-" + pad2(mo); }
+function biStoreList() {
+    var base = (ddPicks && ddPicks.ServiceStore) ? ddPicks.ServiceStore.filter(function(v) { return v !== DD_NONE; }) : STORE_ORDER.slice();
+    Object.keys(storeStatsMaster).forEach(function(st) { if (st !== "未所属" && base.indexOf(st) === -1) base.push(st); });
+    return orderKeys(base, "store");
+}
+function biFillSelectors() {
+    var ms = document.getElementById("bi-month"), ss = document.getElementById("bi-store");
+    if (!ms || !ss) return;
+    var main = document.getElementById("month-selector");
+    if (ms.options.length !== main.options.length) ms.innerHTML = main.innerHTML;
+    if (!ms.value) ms.value = main.value;
+    var cur = ss.value;
+    ss.innerHTML = "<option value=''>（店舗を選んでください）</option>" + biStoreList().map(function(st) { return "<option value='" + escHtml(st) + "'>" + escHtml(st) + "</option>"; }).join("");
+    if (cur && Array.prototype.some.call(ss.options, function(o) { return o.value === cur; })) ss.value = cur;
+}
+// 表のセルから開く。月は今の表の月、店舗は渡されたもの（空なら選択を空で）
+function openBudgetInput(store) {
+    showPage("budget-page");
+    biFillSelectors();
+    var ms = document.getElementById("bi-month"), ss = document.getElementById("bi-store");
+    ms.value = (curRange && curRange.month) || document.getElementById("month-selector").value;
+    ss.value = "";
+    if (store && Array.prototype.some.call(ss.options, function(o) { return o.value === store; })) ss.value = store;
+    biLoad();
+    if (ddPicks === null) ddLoadPicks().then(function() { biFillSelectors(); });
+}
+// 上のボタンから開く。前に選んだ月・店舗をそのまま使う
+function biOpenPage() {
+    showPage("budget-page");
+    var before = (document.getElementById("bi-month").value || "") + "|" + (document.getElementById("bi-store").value || "");
+    biFillSelectors();
+    var now = document.getElementById("bi-month").value + "|" + document.getElementById("bi-store").value;
+    if (now !== before || !document.getElementById("budget-table-container").innerHTML) biLoad();
+    if (ddPicks === null) ddLoadPicks().then(function() { biFillSelectors(); });
+}
+function biStatus(text, kind) { var el = document.getElementById("bi-status"); if (el) { el.textContent = text; el.className = kind ? "bi-" + kind : ""; } }
+
+async function biLoad() {
+    var month = document.getElementById("bi-month").value, store = document.getElementById("bi-store").value;
+    var box = document.getElementById("budget-table-container");
+    var seq = ++biState.seq;
+    biState = { month: month, store: store, rows: [], seq: seq };
+    if (!month || !store) { box.innerHTML = ""; biStatus(month ? "店舗を選ぶと表が出ます" : "", ""); return; }
+    biStatus("読み込み中…", "");
+    box.innerHTML = "";
+    var budRows = null, masters = null, errs = [];
+    var got = await Promise.all([
+        querySalesBudgets(month, store).catch(function(e) { errs.push("予算の読み込みに失敗しました（" + ((e && (e.message || e.code)) || e) + "）"); return null; }),
+        fetchServices("Category = '担当者' and Store = '" + coqlStr(store) + "'", null, "Masters", "id, Name, Store, status, Category").catch(function(e) { errs.push("担当者の読み込みに失敗しました（" + ((e && (e.message || e.code)) || e) + "）"); return null; })
+    ]);
+    if (seq !== biState.seq) return;
+    budRows = got[0]; masters = got[1];
+    if (budRows === null) { biStatus(errs.join(" ／ "), "err"); return; } // 予算が読めないまま入れると重複して作るので、表を出さない
+
+    var rows = [], byStaff = {}, storeRow = null;
+    function addRow(id, name, note) { var r = { staffId: id, name: name, note: note || "", rec: null, chain: Promise.resolve() }; rows.push(r); if (id) byStaff[id] = r; return r; }
+    var budByStaff = {};
+    budRows.forEach(function(b) { var id = budStaffId(b); if (id) budByStaff[id] = b; else storeRow = storeRow || b; });
+    // 1. その店舗の担当者（Masters）。退職は除く（その月に予算の行がある人は出す）
+    (masters || []).slice().sort(function(a, b) { return String(a.Name || "").localeCompare(String(b.Name || ""), "ja"); }).forEach(function(m) {
+        var id = String(m.id), retired = String(m.status || "") === "退職";
+        if (retired && !budByStaff[id]) return;
+        addRow(id, m.Name || ("ID:" + id), retired ? "退職" : "");
+    });
+    // 2. この月この店舗の接客に出てくる担当者で、Masters の店舗が違う・空の人（表の月と同じときだけ分かる）
+    if (curRange && curRange.month === month) {
+        var normStore = {}; Object.keys(staffStoreMap).forEach(function(k) { normStore[normName(k)] = staffStoreMap[k]; });
+        (allData || []).forEach(function(r) {
+            var id = r.ServicePerson && r.ServicePerson.id ? String(r.ServicePerson.id) : null;
+            if (!id || byStaff[id]) return;
+            if (normStore[normName(personName(r))] !== store) return;
+            addRow(id, personName(r), "所属店舗が違う");
+        });
+    }
+    // 3. 予算の行があるのに上に出ていない人
+    Object.keys(budByStaff).forEach(function(id) { if (!byStaff[id]) addRow(id, budStaffName(budByStaff[id]), "所属店舗が違う"); });
+    rows.forEach(function(r) { if (r.staffId && budByStaff[r.staffId]) r.rec = budByStaff[r.staffId]; });
+    // 4. 店舗全体（担当者なし）
+    var sr = addRow(null, "（担当者に割り振らない分）", "担当者の合計に上乗せして数えます"); sr.rec = storeRow;
+    biState.rows = rows;
+    biRender();
+    biStatus(errs.length ? errs.join(" ／ ") : "", errs.length ? "err" : "");
+}
+function biValStr(v) { if (v === null || v === undefined || v === "") return ""; var n = parseFloat(v); return isNaN(n) ? String(v) : String(Math.round(n)); }
+function biRender() {
+    var box = document.getElementById("budget-table-container");
+    var h = "<table class='daily-table bi-table'><thead><tr><th class='shop-header sticky-col-item'>担当者</th>";
+    BI_COLS.forEach(function(c) { h += "<th class='shop-header'>" + escHtml(c.lbl) + "</th>"; });
+    h += "</tr></thead><tbody>";
+    biState.rows.forEach(function(r, ri) {
+        h += "<tr><td class='sticky-col-item bi-name'>" + escHtml(r.name) + (r.note ? "<div class='bi-note'>" + escHtml(r.note) + "</div>" : "") + "</td>";
+        BI_COLS.forEach(function(c, ci) {
+            var v = biValStr(r.rec ? r.rec[c.f] : null);
+            h += "<td class='bi-td'><input type='text' inputmode='numeric' class='bi-input' data-r='" + ri + "' data-c='" + ci + "' data-orig='" + escHtml(v) + "' value='" + escHtml(v) + "' aria-label='" + escHtml(r.name + " " + c.lbl) + "'><div class='dd-ed-msg'></div></td>";
+        });
+        h += "</tr>";
+    });
+    h += "<tr class='daily-total'><td class='sticky-col-item'>合計</td>";
+    BI_COLS.forEach(function(c, ci) { h += "<td><div class='daily-val' data-total='" + ci + "'></div></td>"; });
+    h += "</tr></tbody></table>";
+    box.innerHTML = h;
+    box.querySelectorAll("input.bi-input").forEach(function(el) {
+        el.addEventListener("keydown", function(e) {
+            if (e.key === "Enter") { e.preventDefault(); biSaveCell(el, true); }
+            else if (e.key === "Escape" || e.key === "Esc") { e.preventDefault(); if (!el.__busy) { el.value = el.getAttribute("data-orig") || ""; ddEdMsg(el, "", ""); } }
+        });
+        el.addEventListener("blur", function() { biSaveCell(el, false); });
+        el.addEventListener("paste", function(e) { biPaste(el, e); });
+    });
+    biTotals();
+}
+function biTotals() {
+    BI_COLS.forEach(function(c, ci) {
+        var t = 0, any = false;
+        biState.rows.forEach(function(r) { var v = r.rec ? r.rec[c.f] : null; if (v !== null && v !== undefined && v !== "") { t += budInt(v); any = true; } });
+        var el = document.querySelector("#budget-table-container [data-total='" + ci + "']");
+        if (el) el.textContent = any ? Math.round(t).toLocaleString() : "";
+    });
+}
+// 入力を数に。空は null、整数でなければ undefined
+function biParse(s) {
+    s = String(s === null || s === undefined ? "" : s).replace(/[,，\s　]/g, "").replace(/[０-９]/g, function(ch) { return String.fromCharCode(ch.charCodeAt(0) - 0xFEE0); }).replace(/^[－ー]/, "-").replace(/^¥|^￥/, "");
+    if (s === "") return null;
+    if (!/^-?\d+$/.test(s)) return undefined;
+    return parseInt(s, 10);
+}
+function biName(r) { return biState.month + " " + biState.store + " " + (r.staffId ? r.name : "（店舗）"); }
+// セルを1つ保存する。同じ行の保存は直列（最初の新規作成が終わってから次を送る）
+function biSaveCell(el, viaEnter) {
+    if (!el || el.__busy) return Promise.resolve(false);
+    var r = biState.rows[parseInt(el.getAttribute("data-r"), 10)], col = BI_COLS[parseInt(el.getAttribute("data-c"), 10)];
+    if (!r || !col) return Promise.resolve(false);
+    var orig = el.getAttribute("data-orig") || "", v = biParse(el.value);
+    if (v === undefined) { ddEdMsg(el, "整数で入力してください。保存していません", "err"); return Promise.resolve(false); }
+    var vs = v === null ? "" : String(v);
+    if (vs === orig) { if (el.value !== orig) el.value = orig; return Promise.resolve(false); }
+    var seq = biState.seq, month = biState.month, store = biState.store;
+    el.__busy = true; el.disabled = true;
+    ddEdMsg(el, "保存しています…", "");
+    var p = r.chain.then(async function() {
+        var res = null, err = null, isNew = !(r.rec && r.rec.id);
+        try {
+            if (!isNew) {
+                var up = { id: r.rec.id }; up[col.f] = v;
+                res = await ZOHO.CRM.API.updateRecord({ Entity: "SalesBudgets", APIData: up, Trigger: [] });
+            } else {
+                var ins = { Name: biName(r), BudgetMonth: month + "-01", BudgetStore: store };
+                if (r.staffId) ins.BudgetStaff = { id: r.staffId };
+                ins[col.f] = v;
+                res = await ZOHO.CRM.API.insertRecord({ Entity: "SalesBudgets", APIData: ins, Trigger: [] });
+            }
+        } catch (e) { err = e; }
+        var ok = !err && res && Array.isArray(res.data) && res.data[0] && res.data[0].code === "SUCCESS";
+        if (ok && isNew) {
+            var nid = res.data[0].details && res.data[0].details.id;
+            if (!nid) ok = false;
+            else r.rec = { id: String(nid), Name: biName(r), BudgetMonth: month + "-01", BudgetStore: store, BudgetStaff: r.staffId ? { id: r.staffId, name: r.name } : null, "BudgetStaff.Name": r.staffId ? r.name : null };
+        }
+        if (ok) {
+            r.rec[col.f] = v;
+            el.setAttribute("data-orig", vs); el.value = vs;
+            biApplyGlobal(month, r.rec);
+            ddEdMsg(el, "保存しました", "ok");
+        } else {
+            console.error("予算の保存エラー:", err || res);
+            el.value = orig;
+            ddEdMsg(el, ddErrText(err || res), "err");
+        }
+        el.disabled = false; el.__busy = false;
+        if (viaEnter && document.body.contains(el)) { try { el.focus(); } catch (e) {} }
+        if (seq === biState.seq) biTotals();
+        return ok;
+    });
+    r.chain = p.catch(function() {});
+    return p;
+}
+// 保存できた予算を手元の予算データに入れ、表を作り直す（読み込み直しはしない）
+function biApplyGlobal(month, rec) {
+    if (!budgetDataGlobal || budgetDataGlobal.month !== month || !Array.isArray(budgetDataGlobal.rows)) return;
+    var cur = null;
+    budgetDataGlobal.rows.forEach(function(b) { if (String(b.id) === String(rec.id)) cur = b; });
+    if (!cur) budgetDataGlobal.rows.push(rec); // 新規作成した行は同じものを持つ（以後の書き換えもそのまま効く）
+    else if (cur !== rec) BI_COLS.forEach(function(c) { if (c.f in rec) cur[c.f] = rec[c.f]; });
+    var loadingEl = document.getElementById("loading");
+    if (loadingEl && loadingEl.style.display !== "none") return;
+    try { renderAll(); } catch (e) { console.error("表の再計算エラー:", e); }
+}
+// Excel・スプレッドシートからの貼り付け（タブ・改行区切り）を、そのセルを左上として流し込む
+function biPaste(el, e) {
+    var text = (e.clipboardData || window.clipboardData) ? (e.clipboardData || window.clipboardData).getData("text") : "";
+    if (!text) return;
+    text = text.replace(/\r\n?/g, "\n").replace(/\n$/, "");
+    if (text.indexOf("\t") === -1 && text.indexOf("\n") === -1) return; // 1セルだけは普通の入力と同じ
+    e.preventDefault();
+    var r0 = parseInt(el.getAttribute("data-r"), 10), c0 = parseInt(el.getAttribute("data-c"), 10), targets = [];
+    text.split("\n").forEach(function(line, dr) {
+        line.split("\t").forEach(function(cell, dc) {
+            var t = document.querySelector("#budget-table-container input.bi-input[data-r='" + (r0 + dr) + "'][data-c='" + (c0 + dc) + "']");
+            if (!t || t.__busy) return;
+            t.value = cell.trim();
+            if (t.value !== (t.getAttribute("data-orig") || "")) targets.push(t);
+        });
+    });
+    biSaveMany(targets);
+}
+async function biSaveMany(targets) {
+    var n = 0;
+    for (var i = 0; i < targets.length; i++) { if (await biSaveCell(targets[i], false)) n++; }
+    biStatus(targets.length ? n + "件のセルを保存しました" + (n < targets.length ? "（" + (targets.length - n) + "件は保存できませんでした）" : "") : "変わったセルはありません", n < targets.length ? "err" : "ok");
+    return n;
+}
+// 前月の同じ店舗の行を、今月の空のセルにだけ入れる（上書きしない）
+async function biCopyPrev() {
+    if (!biState.month || !biState.store) return;
+    var seq = biState.seq, prev = biPrevMonth(biState.month), prevRows;
+    biStatus("前月（" + prev + "）を読み込み中…", "");
+    try { prevRows = await querySalesBudgets(prev, biState.store); } catch (e) { biStatus("前月の予算を読めませんでした（" + ((e && (e.message || e.code)) || e) + "）", "err"); return; }
+    if (seq !== biState.seq) return;
+    var plan = [], skipped = 0;
+    prevRows.forEach(function(b) {
+        var id = budStaffId(b), ri = -1;
+        biState.rows.forEach(function(r, i) { if (ri === -1 && (id ? r.staffId === id : !r.staffId)) ri = i; });
+        if (ri === -1) { skipped++; return; }
+        BI_COLS.forEach(function(c, ci) {
+            var pv = b[c.f];
+            if (pv === null || pv === undefined || pv === "") return;
+            var t = document.querySelector("#budget-table-container input.bi-input[data-r='" + ri + "'][data-c='" + ci + "']");
+            if (!t || (t.getAttribute("data-orig") || "") !== "" || t.value.trim() !== "") return; // 入っているセルは上書きしない
+            plan.push({ el: t, v: biValStr(pv) });
+        });
+    });
+    if (!plan.length) { biStatus("前月から入れるセルはありません（空のセルが無いか、前月の予算がありません）" + (skipped ? "。前月の " + skipped + " 人はこの表にいないので入れていません" : ""), ""); return; }
+    if (!window.confirm("前月（" + prev + "）の予算を、空のセル " + plan.length + " 件に入れて保存します（入っているセルは変えません）" + (skipped ? "。前月の " + skipped + " 人はこの表にいないので入れません" : "") + "。よろしいですか？")) { biStatus("", ""); return; }
+    plan.forEach(function(x) { x.el.value = x.v; });
+    await biSaveMany(plan.map(function(x) { return x.el; }));
+}
+document.addEventListener("click", function(e) {
+    if (!e.target || !e.target.closest) return;
+    var td = e.target.closest("td.bud-cell");
+    if (td) openBudgetInput(td.getAttribute("data-bud") || "");
+});
+
 // ===== 数字のセルを押すと、その数字に数えた案件（接客）の一覧を出す =====
 // 表の数字の計算には関わらない。aggregate / aggregateLY が覚えた s.__recs を読むだけ
 var tableCtx = {};      // kind（group / store / staff）→ その表の列・行の定義
@@ -765,6 +1079,16 @@ function markCell(html, s, r, kind, j, k) {
     var sp = ddSpec(s, r);
     if (!sp || !ddHasRecs(s, sp)) return html;
     return html.replace("<td class='", "<td data-dd='" + kind + "|" + j + "|" + k + "' class='dd-cell ");
+}
+
+// 予算・目標・現時点予算・納車台数予算・総粗利保証込予算のセルは、押すと予算入力をその月・その店舗で開く
+// 店舗の列はその店舗、担当者の列はその人の店舗、グループ・合計の列は店舗を空で
+var BUDGET_ROW_MS = ["budget_j", "budget_t", "budget_current", "budget_n", "budget_ar"];
+function markBudCell(html, r, kind, key) {
+    if (!r || BUDGET_ROW_MS.indexOf(r.m) === -1) return html;
+    var st = "";
+    if (key !== null && key !== undefined) { if (kind === "store") st = key; else if (kind === "staff") st = staffStoreMap[key] || ""; }
+    return html.replace("<td class='", "<td data-bud='" + escHtml(st) + "' class='bud-cell ");
 }
 
 // 案件 → その案件を数えた列（sum の行では複数になる）
