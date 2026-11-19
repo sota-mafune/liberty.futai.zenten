@@ -798,36 +798,47 @@ function biStoreList() {
     Object.keys(storeStatsMaster).forEach(function(st) { if (st !== "未所属" && base.indexOf(st) === -1) base.push(st); });
     return orderKeys(base, "store");
 }
-function biFillSelectors() {
+// 表の月（上の月の選択欄。無ければ今月）
+function biTableMonth() {
+    var main = document.getElementById("month-selector");
+    return (main && main.value) || (curRange && curRange.month) || getToday().slice(0, 7);
+}
+// 月・店舗の select を作り、月は渡された月を選ぶ（select の選択肢を作ってから値を入れる。無い月は足す）
+function biFillSelectors(month) {
     var ms = document.getElementById("bi-month"), ss = document.getElementById("bi-store");
     if (!ms || !ss) return;
-    var main = document.getElementById("month-selector");
-    if (ms.options.length !== main.options.length) ms.innerHTML = main.innerHTML;
-    if (!ms.value) ms.value = main.value;
+    var main = document.getElementById("month-selector"), keep = ms.value;
+    if (ms.options.length !== main.options.length) {
+        ms.innerHTML = "";
+        Array.prototype.forEach.call(main.options, function(o) { var x = document.createElement("option"); x.value = o.value; x.text = o.text; ms.add(x); });
+    }
+    var want = month || keep || biTableMonth();
+    if (!Array.prototype.some.call(ms.options, function(o) { return o.value === want; })) { var x = document.createElement("option"); x.value = want; x.text = want.replace("-0", "/").replace("-", "/"); ms.add(x); }
+    ms.value = want;
     var cur = ss.value;
     ss.innerHTML = "<option value=''>（店舗を選んでください）</option>" + biStoreList().map(function(st) { return "<option value='" + escHtml(st) + "'>" + escHtml(st) + "</option>"; }).join("");
     if (cur && Array.prototype.some.call(ss.options, function(o) { return o.value === cur; })) ss.value = cur;
 }
-// 表のセルから開く。月は今の表の月、店舗は渡されたもの（空なら選択を空で）
+// 表のセルから開く。月は表の月、店舗は渡されたもの（空なら選択を空で）
 function openBudgetInput(store) {
     showPage("budget-page");
-    biFillSelectors();
-    var ms = document.getElementById("bi-month"), ss = document.getElementById("bi-store");
-    ms.value = (curRange && curRange.month) || document.getElementById("month-selector").value;
+    biFillSelectors(biTableMonth());
+    var ss = document.getElementById("bi-store");
     ss.value = "";
     if (store && Array.prototype.some.call(ss.options, function(o) { return o.value === store; })) ss.value = store;
     biLoad();
     if (ddPicks === null) ddLoadPicks().then(function() { biFillSelectors(); });
 }
-// 上のボタンから開く。前に選んだ月・店舗をそのまま使う
+// 上のボタンから開く。月は表の月、店舗は前に選んだもの
 function biOpenPage() {
     showPage("budget-page");
     var before = (document.getElementById("bi-month").value || "") + "|" + (document.getElementById("bi-store").value || "");
-    biFillSelectors();
+    biFillSelectors(biTableMonth());
     var now = document.getElementById("bi-month").value + "|" + document.getElementById("bi-store").value;
     if (now !== before || !document.getElementById("budget-table-container").innerHTML) biLoad();
     if (ddPicks === null) ddLoadPicks().then(function() { biFillSelectors(); });
 }
+function biInfo(text) { var el = document.getElementById("bi-info"); if (el) el.textContent = text; }
 function biStatus(text, kind) { var el = document.getElementById("bi-status"); if (el) { el.textContent = text; el.className = kind ? "bi-" + kind : ""; } }
 
 // その店舗の担当者を接客から決める（Masters の所属店舗は空のため）。選んだ月の1日の90日前〜月末（今日より先は今日まで）に
@@ -869,6 +880,7 @@ async function biLoad() {
     var seq = ++biState.seq;
     biState = { month: month, store: store, rows: [], seq: seq };
     if (!month || !store) { box.innerHTML = ""; biStatus(month ? "店舗を選ぶと表が出ます" : "", ""); return; }
+    biInfo("");
     biStatus("担当者を読み込み中…", "");
     box.innerHTML = "";
     var budRows = null, staff = null, errs = [];
@@ -894,8 +906,12 @@ async function biLoad() {
         if (retired && !budByStaff[x.id]) return;
         addRow(x.id, x.name, retired ? "退職" : "");
     });
+    var nRecent = rows.length;
     // 2. その月に予算の行があるのに上に出てこない人
     Object.keys(budByStaff).forEach(function(id) { if (!byStaff[id]) addRow(id, budStaffName(budByStaff[id]), status[id] === "退職" ? "退職" : ""); });
+    var nBudOnly = rows.length - nRecent;
+    // 画面写真でも分かるように、読み込んだ担当者の人数を出す
+    biInfo("担当者 " + nRecent + "人（直近90日の接客から" + (staff === null ? "。読み込みに失敗" : "") + "）" + (nBudOnly ? "＋予算の行がある人 " + nBudOnly + "人" : ""));
     rows.forEach(function(r) { if (r.staffId && budByStaff[r.staffId]) r.rec = budByStaff[r.staffId]; });
     // 4. 店舗全体（担当者なし）
     var sr = addRow(null, "（担当者に割り振らない分）", "担当者の合計に上乗せして数えます"); sr.rec = storeRow;

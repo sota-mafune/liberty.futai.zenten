@@ -96,6 +96,7 @@ td.bud-cell:hover { filter: brightness(0.92); }
 #budget-table-container { height: calc(100vh - 100px); }
 .daily-bar .tab-btn { padding: 3px 10px; }
 #bi-status { font-weight: normal; margin-right: 10px; }
+#bi-info { font-weight: bold; color: #2c3e50; }
 #bi-status.bi-ok { color: #2e7d32; }
 #bi-status.bi-err { color: #c62828; }
 .bi-hint { font-weight: normal; color: #666; }
