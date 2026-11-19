@@ -63,6 +63,12 @@ function applyMyStoreOnce() {
     pick("group-selector", groupOf(myStore)); filterStoreByGroup();
     pick("store-selector", myStore); filterStaffByStore();
     pick("daily-filter", "s:" + myStore); renderDaily();
+    // 予算入力を先に開いていて、店舗がまだ空なら、ここで自分の店舗を入れて読む（人が選んでいれば変えない）
+    var bp = document.getElementById("budget-page"), ss = document.getElementById("bi-store");
+    if (bp && bp.classList.contains("active") && ss && !ss.value && !biMyStoreUsed) {
+        biFillSelectors();
+        if (Array.prototype.some.call(ss.options, function(o) { return o.value === myStore; })) { ss.value = myStore; biMyStoreUsed = true; biLoad(); }
+    }
 }
 
 function initMonthSelector() { var sel = document.getElementById('month-selector'); var now = new Date(); var curMonth = now.getFullYear() + "-" + ("0" + (now.getMonth() + 1)).slice(-2); for(var y=2025; y<=now.getFullYear() + 1; y++) { for(var m=1; m<=12; m++) { var v = y + "-" + (m < 10 ? "0" + m : m); var opt = document.createElement('option'); opt.value = v; opt.text = y + "/" + m; if(v === curMonth) opt.selected = true; sel.add(opt); } } }
@@ -103,13 +109,36 @@ function isStale(seq) { return seq !== fetchSeq; }
 // ウィジェットの COQL は1回 200 件まで（2026-11-19 実測。2000 は通らない）。COQL_PAR 回分を同時に読む
 // ページの並びがずれないよう id 順で読み、id で重複を除く。order by が通らなければ外して読み直す
 var COQL_PAGE = 200, COQL_PAR = 4, COQL_ORDER = " order by id";
+// COQL の 0件（{"status":204,"statusText":"nocontent"}。文字列で来ることもある）
+function isCoqlNoContent(x) {
+    if (!x) return false;
+    if (typeof x === "string") { try { x = JSON.parse(x); } catch (e) { return /nocontent/i.test(x) || /"status"\s*:\s*204/.test(x); } }
+    if (typeof x !== "object") return false;
+    return x.status === 204 || x.status === "204" || String(x.statusText || "").toLowerCase() === "nocontent" || String(x.code || "").toUpperCase() === "NO_CONTENT";
+}
+// エラーを人が読める1つの文に（message・code が無ければ中身を JSON で）
+function errStr(e) {
+    if (e === null || e === undefined) return "不明なエラー";
+    if (typeof e === "string") return e;
+    var parts = [];
+    if (e.code) parts.push(e.code);
+    if (e.message) parts.push(e.message);
+    if (!parts.length && e.data && e.data[0]) { if (e.data[0].code) parts.push(e.data[0].code); if (e.data[0].message) parts.push(e.data[0].message); }
+    if (parts.length) return parts.join(" / ");
+    try { return JSON.stringify(e); } catch (x) { return String(e); }
+}
 // module / fields を省くと接客（Services）を SELECT_FIELDS で読む
 async function coqlPage(where, offset, module, fields) {
     for (var attempt = 0; attempt < 2; attempt++) {
         var res;
         try { res = await ZOHO.CRM.API.coql({ "select_query": "select " + (fields || SELECT_FIELDS) + " from " + (module || "Services") + " where " + where + COQL_ORDER + " limit " + offset + ", " + COQL_PAGE }); }
-        catch (e) { if (COQL_ORDER && attempt === 0) { COQL_ORDER = ""; continue; } throw e; }
+        catch (e) {
+            if (isCoqlNoContent(e)) return { rows: [], more: false }; // 0件のとき SDK が 204 の形で返す（失敗の側に来ることもある）
+            if (COQL_ORDER && attempt === 0) { COQL_ORDER = ""; continue; }
+            throw e;
+        }
         if (res && Array.isArray(res.data)) return { rows: res.data, more: !!(res.info && res.info.more_records) };
+        if (isCoqlNoContent(res)) return { rows: [], more: false };
         var bad = res && typeof res === "object" && (res.code || res.status === "error" || res.message);
         if (!bad) return { rows: [], more: false }; // 0件
         if (COQL_ORDER && attempt === 0) { COQL_ORDER = ""; continue; }
@@ -833,7 +862,8 @@ function renderDaily() {
     }
     function progCell(v) { return v === null ? numCell("-", null, 0) : numCell(v.toLocaleString(), null, 0, v < 0 ? "daily-neg" : ""); }
 
-    var h = "<table class='daily-table'><thead><tr>";
+    // 画面の幅に収める（日・曜日は細く、残りは均等。daily-fit）
+    var h = "<table class='daily-table daily-fit'><colgroup><col class='dcol-day'><col class='dcol-wd'>" + DAILY_COLS.slice(2).map(function() { return "<col>"; }).join("") + "</colgroup><thead><tr>";
     DAILY_COLS.forEach(function(c, ci) { h += "<th class='shop-header" + (ci === 0 ? " daily-sticky" : "") + "'>" + c.lbl + "</th>"; });
     h += "</tr></thead><tbody>";
     var T = { vn: 0, rv: 0, tot: 0, j: 0, sho: 0, bud: 0, budAny: false, bprog: 0, lyvn: 0, lytot: 0, lyj: 0, lyAny: false };
@@ -998,10 +1028,10 @@ async function biLoad() {
     box.innerHTML = "";
     var budRows = null, staff = null, errs = [], planErr = null;
     var got = await Promise.all([
-        querySalesBudgets(month, store).catch(function(e) { errs.push("予算の読み込みに失敗しました（" + ((e && (e.message || e.code)) || e) + "）"); return null; }),
-        biStaffFromServices(month, store).catch(function(e) { errs.push("担当者の読み込みに失敗しました（" + ((e && (e.message || e.code)) || e) + "）"); return null; }),
-        queryWeightRows(month, store).catch(function(e) { planErr = "曜日の重みを読めませんでした（" + ((e && (e.message || e.code)) || e) + "）"; return null; }),
-        queryDailyRows(month, store).catch(function(e) { planErr = "日別の予算を読めませんでした（" + ((e && (e.message || e.code)) || e) + "）"; return null; })
+        querySalesBudgets(month, store).catch(function(e) { errs.push("予算の読み込みに失敗しました（" + errStr(e) + "）"); return null; }),
+        biStaffFromServices(month, store).catch(function(e) { errs.push("担当者の読み込みに失敗しました（" + errStr(e) + "）"); return null; }),
+        queryWeightRows(month, store).catch(function(e) { planErr = "曜日の重みを読めませんでした（" + errStr(e) + "）"; return null; }),
+        queryDailyRows(month, store).catch(function(e) { planErr = "日別の予算を読めませんでした（" + errStr(e) + "）"; return null; })
     ]);
     if (seq !== biState.seq) return;
     budRows = got[0]; staff = got[1];
@@ -1354,7 +1384,7 @@ async function biAddSearch(q) {
     try { rows = (await coqlPage("Category = '担当者' and Name like '%" + like + "%'", 0, "Masters", "id, Name, status")).rows; }
     catch (e) { err = e; }
     if (seq !== biAddSeq) return;
-    if (err) { list.innerHTML = "<div class='bi-add-msg bi-err'>読み込めませんでした（" + escHtml((err && (err.message || err.code)) || err) + "）</div>"; return; }
+    if (err) { list.innerHTML = "<div class='bi-add-msg bi-err'>読み込めませんでした（" + escHtmlerrStr(err) + "）</div>"; return; }
     var shown = {}; biState.rows.forEach(function(r) { if (r.staffId) shown[r.staffId] = true; });
     var cand = (rows || []).filter(function(m) { return m && m.id && String(m.status || "") !== "退職"; });
     cand.sort(function(a, b) { return String(a.Name || "").localeCompare(String(b.Name || ""), "ja"); });
@@ -1389,7 +1419,7 @@ async function biCopyPrev() {
     if (!biState.month || !biState.store) return;
     var seq = biState.seq, prev = biPrevMonth(biState.month), prevRows;
     biStatus("前月（" + prev + "）を読み込み中…", "");
-    try { prevRows = await querySalesBudgets(prev, biState.store); } catch (e) { biStatus("前月の予算を読めませんでした（" + ((e && (e.message || e.code)) || e) + "）", "err"); return; }
+    try { prevRows = await querySalesBudgets(prev, biState.store); } catch (e) { biStatus("前月の予算を読めませんでした（" + errStr(e) + "）", "err"); return; }
     if (seq !== biState.seq) return;
     var plan = [], skipped = 0;
     prevRows.forEach(function(b) {

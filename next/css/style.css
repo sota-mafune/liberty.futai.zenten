@@ -139,6 +139,15 @@ td.bud-cell:hover { filter: brightness(0.92); }
 .bi-table .dd-ed-msg.dd-ed-err { color: #c62828; }
 .bi-table tr.daily-total td.sticky-col-item { background: #fff9e6; }
 
+/* 日別の表だけは画面の幅に収める（文字の大きさは変えない。見出しは折り返してよい） */
+#daily-table-container table.daily-fit { width: 100% !important; table-layout: fixed !important; }
+#daily-table-container table.daily-fit th, #daily-table-container table.daily-fit td { width: auto !important; min-width: 0 !important; max-width: none !important; }
+#daily-table-container table.daily-fit col.dcol-day { width: 52px; }
+#daily-table-container table.daily-fit col.dcol-wd { width: 36px; }
+#daily-table-container table.daily-fit th { white-space: normal; line-height: 1.2; padding: 2px 1px; word-break: keep-all; overflow-wrap: anywhere; }
+/* エラー文は折り返して全文を読めるように */
+.bi-warn, #bi-status { white-space: normal; word-break: break-all; }
+
 td.dl-cell { cursor: pointer; }
 td.dl-cell:hover { filter: brightness(0.92); }
 
