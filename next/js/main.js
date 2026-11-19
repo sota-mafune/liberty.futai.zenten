@@ -143,7 +143,7 @@ async function fetchByCOQL() {
         storeStatsMaster = {}; staffStatsMaster = {}; storeGroupMap = {}; staffStoreMap = {}; loadFailed = true;
         loadingEl.innerHTML += "<br><span style='color:#c00000;'>▶ 取得に失敗しました（" + String((e && e.message) || e).replace(/[<>&]/g, "") + "）。期間を選び直すか、画面を開き直してください。</span>";
         updateSelector('group-selector', [], '全グループ表示'); updateSelector('store-selector', [], '全店舗表示');
-        ["group-table-container", "store-table-container", "staff-table-container"].forEach(function(id) { document.getElementById(id).innerHTML = ""; });
+        ["group-table-container", "store-table-container", "staff-table-container", "daily-table-container"].forEach(function(id) { var el = document.getElementById(id); if (el) el.innerHTML = ""; });
         return;
     }
 
@@ -339,6 +339,7 @@ function renderAll(seq) {
     updateSelector('store-selector', orderKeys(Array.from(storeSet), "store"), '全店舗表示');
     document.getElementById("group-table-container").innerHTML = buildTable(gS, "グループ名", totalS, "group");
     filterStoreByGroup(); filterStaffByStore();
+    renderDaily();
 }
 
 // 列の並び: グループは GROUP_ORDER、店舗はグループ順→グループ内の順（一覧に無い店舗は最後に名前順）、担当者は店舗の順→名前順
@@ -559,6 +560,167 @@ function showPage(id) { document.querySelectorAll('.page-content').forEach(funct
 function filterStoreByGroup() { if (loadFailed) { document.getElementById("store-table-container").innerHTML = ""; return; } var g = document.getElementById('group-selector').value, f = {}, t = createStats(); Object.keys(storeStatsMaster).forEach(function(st){ if (g === "all" || storeGroupMap[st] === g) { f[st] = storeStatsMaster[st]; Object.keys(t).forEach(function(k){ if(typeof t[k] === 'number') t[k] += storeStatsMaster[st][k]; }); mergeRecs(t, storeStatsMaster[st]); } }); document.getElementById("store-table-container").innerHTML = buildTable(f, "店舗名", t, "store"); }
 function filterStaffByStore() { if (loadFailed) { document.getElementById("staff-table-container").innerHTML = ""; return; } var s = document.getElementById('store-selector').value, f = {}, t = createStats(); Object.keys(staffStatsMaster).forEach(function(n){ if (s === "all" || staffStoreMap[n] === s) { f[n] = staffStatsMaster[n]; Object.keys(t).forEach(function(k){ if(typeof t[k] === 'number') t[k] += staffStatsMaster[n][k]; }); mergeRecs(t, staffStatsMaster[n]); } }); document.getElementById("staff-table-container").innerHTML = buildTable(f, "担当者名", t, "staff"); }
 
+// ===== 日別の表（シート「進捗表(Gr込)」BX〜CM に合わせる） =====
+// 数え方は aggregate / aggregateLY と同じ条件。表の数字（3つの表）には関わらない
+var DAILY_WD = ["日", "月", "火", "水", "木", "金", "土"];
+var dailyCtx = null;   // 押したときの一覧用: { days, scopeLabel, sets: { 列: [日ごとの案件の配列] }, lyOk: [日ごとに昨年を出すか] }
+var DAILY_COLS = [
+    { key: "date", lbl: "日" }, { key: "wd", lbl: "曜日" },
+    { key: "vn", lbl: "新規来場", click: "vn" }, { key: "rv", lbl: "再来場", click: "rv" }, { key: "tot", lbl: "総来場", click: "tot" },
+    { key: "bud", lbl: "予算" }, { key: "fc", lbl: "着地予想" }, { key: "j", lbl: "実績", click: "j" },
+    { key: "bprog", lbl: "予算進捗" }, { key: "fprog", lbl: "着地予想進捗" },
+    { key: "sho", lbl: "商談数", click: "sho" }, { key: "shoR", lbl: "商談率", click: "sho" }, { key: "jR", lbl: "成約率", click: "j" },
+    { key: "lyvn", lbl: "昨年新規", click: "lyvn" }, { key: "lytot", lbl: "昨年総", click: "lytot" }, { key: "lyj", lbl: "昨年成約", click: "lyj" }
+];
+var DAILY_SET_LABEL = { vn: "新規来場", rv: "再来場", tot: "総来場", j: "実績", sho: "商談数", lyvn: "昨年新規", lytot: "昨年総", lyj: "昨年成約" };
+
+function dailyDays(start, end) {
+    var out = [];
+    if (!start || !end || start > end) return out;
+    var p = start.split("-").map(Number), d = new Date(Date.UTC(p[0], p[1] - 1, p[2]));
+    for (var i = 0; i < 400; i++) { var s = d.toISOString().slice(0, 10); if (s > end) break; out.push(s); d.setUTCDate(d.getUTCDate() + 1); }
+    return out;
+}
+function dailyWd(ds) { var p = ds.split("-").map(Number); return new Date(Date.UTC(p[0], p[1] - 1, p[2])).getUTCDay(); }
+function dailyMd(ds) { var p = ds.split("-").map(Number); return p[1] + "/" + p[2]; }
+// 絞り込み: "all" / "g:グループ" / "s:店舗"。店舗は rec.ServiceStore（空は「未所属」）、グループは groupOf（既存の表と同じ）
+function dailyInScope(st, f) {
+    st = st || "未所属";
+    if (!f || f === "all") return true;
+    if (f.indexOf("g:") === 0) return groupOf(st) === f.slice(2);
+    if (f.indexOf("s:") === 0) return st === f.slice(2);
+    return true;
+}
+function dailyUpdateFilter() {
+    var sel = document.getElementById("daily-filter");
+    if (!sel) return "all";
+    var cur = sel.value || "all";
+    var stores = orderKeys(Object.keys(storeStatsMaster), "store");
+    var groups = orderKeys(Array.from(new Set(stores.map(function(st) { return groupOf(st); }))), "group");
+    var h = "<option value='all'>全店</option><optgroup label='グループ'>" + groups.map(function(g) { return "<option value='g:" + escHtml(g) + "'>" + escHtml(g) + "</option>"; }).join("") + "</optgroup>";
+    h += "<optgroup label='店舗'>" + stores.map(function(st) { return "<option value='s:" + escHtml(st) + "'>" + escHtml(st) + "</option>"; }).join("") + "</optgroup>";
+    sel.innerHTML = h;
+    var ok = Array.prototype.some.call(sel.options, function(o) { return o.value === cur; });
+    sel.value = ok ? cur : "all";
+    return sel.value;
+}
+
+function renderDaily() {
+    var box = document.getElementById("daily-table-container");
+    if (!box) return;
+    if (loadFailed || !curRange) { box.innerHTML = ""; dailyCtx = null; return; }
+    var f = dailyUpdateFilter();
+    var days = dailyDays(curRange.start, curRange.end), idx = {};
+    days.forEach(function(d, i) { idx[d] = i; });
+    var sets = {}; ["vn", "rv", "tot", "j", "sho", "lyvn", "lytot", "lyj"].forEach(function(k) { sets[k] = days.map(function() { return []; }); });
+
+    (allData || []).forEach(function(rec) {
+        if (!dailyInScope(rec.ServiceStore, f)) return;
+        var vD = (rec.VisitedDateTime || "").split("T")[0], cD = rec.ClosingDay || "";
+        if (vD in idx) {
+            var i = idx[vD];
+            if (rec.FOrR === "初回") sets.vn[i].push(rec);
+            if (rec.FOrR === "再来") sets.rv[i].push(rec);
+            if (rec.FOrR === "初回" || rec.FOrR === "再来") sets.tot[i].push(rec);
+            if (rec.FOrR === "初回" && rec.Seated === "〇") sets.sho[i].push(rec);
+        }
+        if ((cD in idx) && !isCancelled(rec)) sets.j[idx[cD]].push(rec);
+    });
+
+    // 昨年: 前年の同じ日（2/29 は 2/28）。今日より後・昨年が読めていない・CRM のデータより前の日は「-」
+    var lyOk = days.map(function(d) { return lyAvailable && d <= curRange.today && shiftYear(d, -1) >= CRM_DATA_START; });
+    var lyIdx = {};
+    days.forEach(function(d, i) { if (!lyOk[i]) return; var ld = shiftYear(d, -1); (lyIdx[ld] = lyIdx[ld] || []).push(i); });
+    if (Object.keys(lyIdx).length) (lyData || []).forEach(function(rec) {
+        if (!dailyInScope(rec.ServiceStore, f)) return;
+        var vD = (rec.VisitedDateTime || "").split("T")[0], cD = rec.ClosingDay || "";
+        (lyIdx[vD] || []).forEach(function(i) {
+            if (rec.FOrR === "初回") sets.lyvn[i].push(rec);
+            if (rec.FOrR === "初回" || rec.FOrR === "再来") sets.lytot[i].push(rec);
+        });
+        if (!isCancelled(rec)) (lyIdx[cD] || []).forEach(function(i) { sets.lyj[i].push(rec); });
+    });
+
+    // 予算: その日・絞り込み範囲の店舗の日次予算（成約台数予算）。その月の行が1つも無ければ「未登録」
+    var bud = days.map(function() { return 0; }), monthRows = {};
+    if (budgetDataGlobal && budgetDataGlobal.daily_budget) budgetDataGlobal.daily_budget.forEach(function(b) {
+        var d = normDate(b["日"]);
+        if (!d || !dailyInScope(b["店舗"], f)) return;
+        monthRows[d.slice(0, 7)] = (monthRows[d.slice(0, 7)] || 0) + 1;
+        if (d in idx) bud[idx[d]] += (parseInt(b["成約台数予算"]) || 0);
+    });
+    var budOk = days.map(function(d) { return !!monthRows[d.slice(0, 7)]; });
+
+    var scopeLabel = f === "all" ? "全店" : f.slice(2);
+    dailyCtx = { days: days, sets: sets, lyOk: lyOk, scopeLabel: scopeLabel };
+
+    function n(k, i) { return sets[k][i].length; }
+    function numCell(v, click, i, extraCls, style) {
+        var attr = click ? " data-daily='" + click + "|" + i + "'" : "";
+        return "<td class='daily-td" + (click ? " dl-cell" : "") + (extraCls ? " " + extraCls : "") + "'" + attr + (style ? " style='" + style + "'" : "") + "><div class='daily-val'>" + v + "</div></td>";
+    }
+    function progCell(v) { return v === null ? numCell("-", null, 0) : numCell(v.toLocaleString(), null, 0, v < 0 ? "daily-neg" : ""); }
+
+    var h = "<table class='daily-table'><thead><tr>";
+    DAILY_COLS.forEach(function(c, ci) { h += "<th class='shop-header" + (ci === 0 ? " daily-sticky" : "") + "'>" + c.lbl + "</th>"; });
+    h += "</tr></thead><tbody>";
+    var T = { vn: 0, rv: 0, tot: 0, j: 0, sho: 0, bud: 0, budAny: false, bprog: 0, lyvn: 0, lytot: 0, lyj: 0, lyAny: false };
+    days.forEach(function(d, i) {
+        var wd = dailyWd(d), wdCls = wd === 6 ? "daily-sat" : (wd === 0 ? "daily-sun" : "");
+        var vn = n("vn", i), rv = n("rv", i), tot = n("tot", i), j = n("j", i), sho = n("sho", i);
+        T.vn += vn; T.rv += rv; T.tot += tot; T.j += j; T.sho += sho;
+        var bprog = null;
+        if (budOk[i]) { T.bud += bud[i]; T.budAny = true; bprog = j - bud[i]; T.bprog += bprog; }
+        h += "<tr>" + numCell(escHtml(dailyMd(d)), null, i, "daily-sticky " + wdCls) + numCell(DAILY_WD[wd], null, i, wdCls);
+        h += numCell(vn.toLocaleString(), "vn", i) + numCell(rv.toLocaleString(), "rv", i) + numCell(tot.toLocaleString(), "tot", i);
+        h += numCell(budOk[i] ? bud[i].toLocaleString() : "未登録", null, i) + numCell("-", null, i) + numCell(j.toLocaleString(), "j", i, "daily-j");
+        h += progCell(bprog) + numCell("-", null, i);
+        h += numCell(sho.toLocaleString(), "sho", i) + numCell(pctDash(sho, vn), "sho", i) + numCell(pctDash(j, vn), "j", i);
+        if (lyOk[i]) {
+            var a = n("lyvn", i), b = n("lytot", i), c = n("lyj", i);
+            T.lyvn += a; T.lytot += b; T.lyj += c; T.lyAny = true;
+            h += numCell(a.toLocaleString(), "lyvn", i, "daily-ly") + numCell(b.toLocaleString(), "lytot", i, "daily-ly") + numCell(c.toLocaleString(), "lyj", i, "daily-ly");
+        } else h += numCell("-", null, i, "daily-ly") + numCell("-", null, i, "daily-ly") + numCell("-", null, i, "daily-ly");
+        h += "</tr>";
+    });
+    // 合計（率は合計から計算）。押すと期間中の案件をまとめて出す（日 = -1）
+    h += "<tr class='daily-total'>" + numCell("合計", null, -1, "daily-sticky") + numCell("", null, -1);
+    h += numCell(T.vn.toLocaleString(), "vn", -1) + numCell(T.rv.toLocaleString(), "rv", -1) + numCell(T.tot.toLocaleString(), "tot", -1);
+    h += numCell(T.budAny ? T.bud.toLocaleString() : "未登録", null, -1) + numCell("-", null, -1) + numCell(T.j.toLocaleString(), "j", -1, "daily-j");
+    h += progCell(T.budAny ? T.bprog : null) + numCell("-", null, -1);
+    h += numCell(T.sho.toLocaleString(), "sho", -1) + numCell(pctDash(T.sho, T.vn), "sho", -1) + numCell(pctDash(T.j, T.vn), "j", -1);
+    if (T.lyAny) h += numCell(T.lyvn.toLocaleString(), "lyvn", -1, "daily-ly") + numCell(T.lytot.toLocaleString(), "lytot", -1, "daily-ly") + numCell(T.lyj.toLocaleString(), "lyj", -1, "daily-ly");
+    else h += numCell("-", null, -1, "daily-ly") + numCell("-", null, -1, "daily-ly") + numCell("-", null, -1, "daily-ly");
+    h += "</tr></tbody></table>";
+    box.innerHTML = h;
+}
+
+// 日別のセルを押したときの一覧。率のセルは分子の案件
+function dailyOpen(spec) {
+    if (!dailyCtx) return;
+    var p = String(spec || "").split("|"), key = p[0], i = parseInt(p[1], 10), ctx = dailyCtx;
+    if (!ctx.sets[key] || isNaN(i) || i >= ctx.days.length) return;
+    var list = [], seen = new Set();
+    var idxs = i === -1 ? ctx.days.map(function(_, x) { return x; }) : [i];
+    idxs.forEach(function(x) { ctx.sets[key][x].forEach(function(rec) { if (!seen.has(rec)) { seen.add(rec); list.push(rec); } }); });
+    var byClose = key === "j" || key === "lyj";
+    list.sort(function(a, b) {
+        var da = byClose ? (a.ClosingDay || "") : (a.VisitedDateTime || "").split("T")[0], db = byClose ? (b.ClosingDay || "") : (b.VisitedDateTime || "").split("T")[0];
+        if (da !== db) return da < db ? -1 : 1;
+        return String(a.Name || "").localeCompare(String(b.Name || ""), "ja");
+    });
+    var dayLbl = i === -1 ? "合計（" + dailyMd(ctx.days[0]) + "〜" + dailyMd(ctx.days[ctx.days.length - 1]) + "）" : dailyMd(ctx.days[i]) + "(" + DAILY_WD[dailyWd(ctx.days[i])] + ")";
+    var title = "日別（" + ctx.scopeLabel + "） ／ " + dayLbl + " ／ " + DAILY_SET_LABEL[key] + " ／ " + list.length.toLocaleString() + "件";
+    var subs = [];
+    if (key.indexOf("ly") === 0) subs.push("前年の同じ日付の案件です");
+    ddShowList(title, subs, list, [], null);
+}
+document.addEventListener("click", function(e) {
+    if (!e.target || !e.target.closest) return;
+    var td = e.target.closest("td.dl-cell");
+    if (td) dailyOpen(td.getAttribute("data-daily"));
+});
+
 // ===== 数字のセルを押すと、その数字に数えた案件（接客）の一覧を出す =====
 // 表の数字の計算には関わらない。aggregate / aggregateLY が覚えた s.__recs を読むだけ
 var tableCtx = {};      // kind（group / store / staff）→ その表の列・行の定義
@@ -669,25 +831,40 @@ function ddOpenFromCell(dd, cat) {
         var amt = 0; list.forEach(function(rec) { amt += ddNum(rec[sp.amount]); });
         subs.push(DD_AMOUNT_LABEL[sp.amount] + "の合計 " + Math.round(amt).toLocaleString() + " ／ 1台あたり " + (list.length ? Math.round(amt / list.length) : 0).toLocaleString());
     }
-    subs.push("行を押すと接客のレコードを新しいタブで開きます");
+    var extraHead = [];
+    if (sp.items) extraHead.push("数えた項目");
+    if (sp.amount) extraHead.push(DD_AMOUNT_LABEL[sp.amount]);
+    ddShowList(title, subs, list, extraHead, function(rec) {
+        var x = "";
+        if (sp.items) x += "<td>" + escHtml(map.get(rec).map(function(key) { return ddItemLabel(ctx.rowDef, key); }).join("・")) + "</td>";
+        if (sp.amount) x += "<td class='dd-num'>" + escHtml(ddNum(rec[sp.amount]).toLocaleString()) + "</td>";
+        return x;
+    });
+}
 
-    var h = "<table class='dd-table'><thead><tr><th>接客番号</th><th>管理番号</th><th>お客様名</th><th>来店日</th><th>成約日</th><th>納車日</th><th>店舗</th><th>担当者</th><th>軽/普</th>";
-    if (sp.items) h += "<th>数えた項目</th>";
-    if (sp.amount) h += "<th>" + escHtml(DD_AMOUNT_LABEL[sp.amount]) + "</th>";
+// 一覧（モーダル）を出す。extraHead / extraCell は右端に足す列（無ければ空）
+function ddShowList(title, subs, list, extraHead, extraCell) {
+    subs = subs.slice();
+    subs.push("行を押すと接客のレコードを新しいタブで開きます");
+    subs.push("管理番号・日付・店舗・車両区分はここで直せます（Enter で保存）");
+
+    ddCurRecs = {};
+    list.forEach(function(rec) { ddCurRecs[String(rec.id)] = rec; });
+    var h = "<table class='dd-table'><thead><tr><th>接客番号</th><th>管理番号</th><th>お客様名</th><th>来店日</th><th>成約日</th><th>納車日</th><th>店舗</th><th>担当者</th><th>車両区分</th>";
+    (extraHead || []).forEach(function(x) { h += "<th>" + escHtml(x) + "</th>"; });
     h += "</tr></thead><tbody>";
     list.forEach(function(rec) {
         var dealId = rec.Deal_Name && typeof rec.Deal_Name === "object" ? String(rec.Deal_Name.id || "") : "";
         var dn = ddDealName(rec);
         h += "<tr data-id='" + escHtml(rec.id) + "'>";
-        h += "<td>" + escHtml(rec.Name || "") + "</td><td>" + escHtml(rec.ManagementNum || "") + "</td>";
+        h += "<td>" + escHtml(rec.Name || "") + "</td>" + ddEditCell(rec, "ManagementNum");
         h += "<td" + (dealId && !dn ? " data-deal='" + escHtml(dealId) + "'" : "") + ">" + escHtml(dn || (dealId ? "…" : "")) + "</td>";
-        h += "<td>" + escHtml((rec.VisitedDateTime || "").split("T")[0]) + "</td><td>" + escHtml(rec.ClosingDay || "") + "</td><td>" + escHtml((rec.nousyayoteibi || "").split("T")[0]) + "</td>";
-        h += "<td>" + escHtml(rec.ServiceStore || "") + "</td><td>" + escHtml(personName(rec)) + "</td><td>" + (catOf(rec) === "k" ? "軽" : "普") + "</td>";
-        if (sp.items) h += "<td>" + escHtml(map.get(rec).map(function(key) { return ddItemLabel(ctx.rowDef, key); }).join("・")) + "</td>";
-        if (sp.amount) h += "<td class='dd-num'>" + escHtml(ddNum(rec[sp.amount]).toLocaleString()) + "</td>";
+        h += ddEditCell(rec, "VisitedDateTime") + ddEditCell(rec, "ClosingDay") + ddEditCell(rec, "nousyayoteibi");
+        h += ddEditCell(rec, "ServiceStore") + "<td>" + escHtml(personName(rec)) + "</td>" + ddEditCell(rec, "SyaryouCategory");
+        if (extraCell) h += extraCell(rec);
         h += "</tr>";
     });
-    if (list.length === 0) h += "<tr><td colspan='" + (9 + (sp.items ? 1 : 0) + (sp.amount ? 1 : 0)) + "'>該当する案件はありません</td></tr>";
+    if (list.length === 0) h += "<tr><td colspan='" + (9 + (extraHead || []).length) + "'>該当する案件はありません</td></tr>";
     h += "</tbody></table>";
 
     var ov = ddEnsureModal();
@@ -695,9 +872,11 @@ function ddOpenFromCell(dd, cat) {
     document.getElementById("dd-sub").innerHTML = subs.map(escHtml).join("<br>");
     document.getElementById("dd-body").innerHTML = h;
     document.getElementById("dd-body").scrollTop = 0;
+    ddBindEdits(document.getElementById("dd-body"));
     ov.style.display = "flex";
     var seq = ++ddSeq;
     ddFillDealNames(list, seq);
+    if (ddPicks === null) ddLoadPicks(); // 店舗・車両区分の選択肢は初めて開いたときに1回だけ読む。読めたら今の一覧の欄を選択欄に替える
 }
 
 function ddEnsureModal() {
@@ -709,7 +888,7 @@ function ddEnsureModal() {
     document.body.appendChild(ov);
     ov.addEventListener("click", function(e) { if (e.target === ov) ddClose(); });
     document.getElementById("dd-close").addEventListener("click", ddClose);
-    document.getElementById("dd-body").addEventListener("click", function(e) { var tr = e.target.closest ? e.target.closest("tr[data-id]") : null; if (tr) ddOpenRecord(tr.getAttribute("data-id")); });
+    document.getElementById("dd-body").addEventListener("click", function(e) { if (e.target.closest && e.target.closest("td.dd-ed")) return; var tr = e.target.closest ? e.target.closest("tr[data-id]") : null; if (tr) ddOpenRecord(tr.getAttribute("data-id")); });
     return ov;
 }
 function ddClose() { var ov = document.getElementById("dd-overlay"); if (ov && ov.style.display !== "none") { ov.style.display = "none"; ddSeq++; } }
@@ -720,6 +899,181 @@ function ddOpenRecord(id) {
     try { w = window.open("https://crmplus.zoho.jp/crm/org90002333383/tab/CustomModule6/" + id, "_blank"); } catch (e) { w = null; }
     if (w) return;
     try { var pr = ZOHO.CRM.UI.Record.open({ Entity: "Services", RecordID: id }); if (pr && pr.catch) pr.catch(function(e) { console.error("レコードを開けませんでした:", e); }); } catch (e) { console.error("レコードを開けませんでした:", e); }
+}
+
+// --- 一覧の中で直せる列（接客 = Services）。保存は接客の画面と同じくワークフローを動かす ---
+// recalc: 表の数字に効く項目。保存できたら手元のデータで表を計算し直す（読み込み直しはしない）
+var DD_EDIT = {
+    ManagementNum:   { kind: "text",     label: "管理番号", recalc: false },
+    VisitedDateTime: { kind: "datetime", label: "来店日",   recalc: true },
+    ClosingDay:      { kind: "date",     label: "成約日",   recalc: true },
+    nousyayoteibi:   { kind: "datetime", label: "納車日",   recalc: true },
+    ServiceStore:    { kind: "pick",     label: "店舗",     recalc: true },
+    SyaryouCategory: { kind: "pick",     label: "車両区分", recalc: true }
+};
+var DD_TEXT_MAX = 255;
+var DD_NONE = "-None-";
+var ddPicks = null;        // 選択肢。null = まだ読んでいない、false = 読めなかった（その列は文字のまま）、{ 項目: [表示名…] }
+var ddPicksLoading = false;
+var ddCurRecs = {};        // 開いている一覧の id → 案件
+
+// datetime の値を日本時間の "YYYY-MM-DDTHH:mm"（datetime-local の形）に
+function ddToJstLocal(v) {
+    if (!v) return "";
+    var s = String(v), m = s.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?$/);
+    if (!m) return "";
+    if (!m[3] || m[3] === "+09:00" || m[3] === "+0900") return m[1] + "T" + m[2];
+    var d = new Date(s);
+    if (isNaN(d.getTime())) return "";
+    return new Date(d.getTime() + 9 * 3600 * 1000).toISOString().slice(0, 16);
+}
+function ddShowVal(field, v) {
+    var k = DD_EDIT[field].kind;
+    if (v === null || v === undefined) return "";
+    if (k === "date") return String(v).slice(0, 10);
+    if (k === "datetime") return ddToJstLocal(v);
+    return String(v);
+}
+function ddEditCell(rec, field) {
+    var cfg = DD_EDIT[field], v = rec[field], shown = ddShowVal(field, v);
+    var attrs = " class='dd-ed-input' data-id='" + escHtml(rec.id) + "' data-f='" + field + "' data-orig='" + escHtml(shown) + "' aria-label='" + escHtml(cfg.label) + "'";
+    var ctl;
+    if (cfg.kind === "pick") {
+        if (!ddPicks || !ddPicks[field]) return "<td data-pf='" + field + "' data-id='" + escHtml(rec.id) + "'>" + escHtml(v || "") + "</td>"; // 選択肢が無い間は文字のまま
+        var opts = ddPicks[field].slice();
+        if (opts.indexOf(DD_NONE) === -1) opts.unshift(DD_NONE);
+        if (shown && opts.indexOf(shown) === -1) opts.unshift(shown); // 今の値が選択肢に無ければ先頭に足す
+        var sel = shown || DD_NONE;
+        ctl = "<select" + attrs + ">" + opts.map(function(o) { return "<option value='" + escHtml(o) + "'" + (o === sel ? " selected" : "") + ">" + escHtml(o) + "</option>"; }).join("") + "</select>";
+    } else {
+        var type = cfg.kind === "date" ? "date" : (cfg.kind === "datetime" ? "datetime-local" : "text");
+        ctl = "<input type='" + type + "'" + attrs + " value='" + escHtml(shown) + "'>";
+    }
+    return "<td class='dd-ed'>" + ctl + "<div class='dd-ed-msg'></div></td>";
+}
+function ddCtlVal(el) {
+    var k = DD_EDIT[el.getAttribute("data-f")].kind;
+    if (k === "pick") return el.value === DD_NONE ? "" : el.value;
+    if (k === "text") return String(el.value || "").trim();
+    return el.value || "";
+}
+function ddRestore(el) {
+    var orig = el.getAttribute("data-orig") || "";
+    el.value = (el.tagName === "SELECT" && !orig) ? DD_NONE : orig;
+}
+function ddBindEdits(root) {
+    if (!root) return;
+    root.querySelectorAll(".dd-ed-input").forEach(function(el) {
+        if (el.__bound) return;
+        el.__bound = true;
+        // 入力欄の操作で行のクリック（レコードを開く）を起こさない
+        el.addEventListener("click", function(e) { e.stopPropagation(); });
+        el.addEventListener("mousedown", function(e) { e.stopPropagation(); });
+        el.addEventListener("keydown", function(e) {
+            e.stopPropagation(); // Esc でモーダルを閉じない
+            if (e.key === "Enter") { e.preventDefault(); ddSaveEdit(el, true); }
+            else if (e.key === "Escape" || e.key === "Esc") { e.preventDefault(); if (!el.__busy) { ddRestore(el); ddEdMsg(el, "", ""); } }
+        });
+        if (el.tagName === "SELECT") el.addEventListener("change", function() { ddSaveEdit(el, false); });
+        else el.addEventListener("blur", function() { ddSaveEdit(el, false); });
+    });
+}
+function ddEdMsg(el, text, kind) {
+    var m = el.parentNode ? el.parentNode.querySelector(".dd-ed-msg") : null;
+    if (!m) return;
+    m.textContent = text; // textContent なので Zoho のエラー文も HTML として解釈されない
+    m.className = "dd-ed-msg" + (kind ? " dd-ed-" + kind : "");
+}
+function ddErrText(x) {
+    var d = (x && Array.isArray(x.data) && x.data[0]) ? x.data[0] : (x || {});
+    if (typeof d !== "object") return "保存できませんでした: " + String(d);
+    var code = d.code || d.status || "", msg = d.message || (x && x.message) || "";
+    if (!code && !msg) { try { msg = JSON.stringify(x); } catch (e) { msg = String(x); } }
+    return "保存できませんでした: " + [code, msg].filter(function(v) { return v; }).join(" / ");
+}
+// 保存できた値を手元のデータ（今年・昨年・開いている一覧）に入れる
+function ddApplyLocal(id, field, v) {
+    [allData || [], lyData || []].forEach(function(arr) { arr.forEach(function(r) { if (r && String(r.id) === id) r[field] = v; }); });
+    if (ddCurRecs[id]) ddCurRecs[id][field] = v;
+}
+async function ddSaveEdit(el, viaEnter) {
+    if (!el || el.__busy) return; // 送信中（と確認の最中）の Enter・blur・change は無視
+    var field = el.getAttribute("data-f"), cfg = DD_EDIT[field], id = String(el.getAttribute("data-id") || "");
+    if (!cfg || !/^\d+$/.test(id)) return;
+    var orig = el.getAttribute("data-orig") || "";
+    if ((cfg.kind === "date" || cfg.kind === "datetime") && el.validity && el.validity.badInput) { ddEdMsg(el, "日付が途中です。保存していません（Esc で元に戻せます）", "err"); return; }
+    var val = ddCtlVal(el);
+    if (val === (cfg.kind === "text" ? orig.trim() : orig)) return; // 元と同じなら送らない
+    if (cfg.kind === "text" && val.length > DD_TEXT_MAX) { ddEdMsg(el, cfg.label + "は" + DD_TEXT_MAX + "文字までです（いま" + val.length + "文字）。保存していません", "err"); return; }
+    el.__busy = true;
+    if (val === "") {
+        var ok = false;
+        try { ok = window.confirm(cfg.label + "を消します。よろしいですか？"); } catch (e) { ok = false; }
+        if (!ok) { ddRestore(el); ddEdMsg(el, "", ""); el.__busy = false; return; }
+    }
+    var send = val === "" ? null : (cfg.kind === "datetime" ? val.slice(0, 16) + ":00+09:00" : val);
+    var data = { id: id }; data[field] = send;
+    el.disabled = true;
+    ddEdMsg(el, "保存しています…", "");
+    var res = null, err = null;
+    try {
+        // ワークフローは止めない（接客の画面で保存したときと同じく、受注データなどへ写すため）
+        res = await ZOHO.CRM.API.updateRecord({ Entity: "Services", APIData: data, Trigger: ["workflow"] });
+    } catch (e) { err = e; }
+    var success = !err && res && Array.isArray(res.data) && res.data[0] && res.data[0].code === "SUCCESS";
+    if (success) {
+        ddApplyLocal(id, field, send);
+        el.setAttribute("data-orig", val);
+        ddRestore(el);
+        var note = "保存しました";
+        if (cfg.recalc) {
+            var loadingEl = document.getElementById("loading");
+            if (loadingEl && loadingEl.style.display !== "none") note = "保存しました（読み込み中のため、表は読み込みが終わると最新になります）";
+            else {
+                // 手元のデータで表だけ作り直す。fetchSeq は進めない。モーダルは表の外にあるので消えない
+                try { renderAll(); note = "保存しました。表に反映しました（この一覧は開き直すと最新になります）"; }
+                catch (e) { console.error("表の再計算エラー:", e); note = "保存しました（表への反映に失敗。画面を開き直してください）"; }
+            }
+        }
+        ddEdMsg(el, note, "ok");
+    } else {
+        console.error(cfg.label + "の保存エラー:", err || res);
+        ddRestore(el);
+        ddEdMsg(el, ddErrText(err || res), "err");
+    }
+    el.disabled = false;
+    el.__busy = false;
+    if (viaEnter && document.body.contains(el)) { try { el.focus(); } catch (e) {} } // 無効にした間に外れた focus を戻す（続けて Esc で閉じてしまわないように）
+}
+async function ddLoadPicks() {
+    if (ddPicksLoading || ddPicks !== null) return;
+    ddPicksLoading = true;
+    var got = null;
+    try {
+        var res = await ZOHO.CRM.META.getFields({ Entity: "Services" });
+        var fs = res && (Array.isArray(res.fields) ? res.fields : (Array.isArray(res.data) ? res.data : null));
+        if (fs) {
+            got = {};
+            ["ServiceStore", "SyaryouCategory"].forEach(function(f) {
+                var x = fs.filter(function(y) { return y && y.api_name === f; })[0];
+                if (x && Array.isArray(x.pick_list_values) && x.pick_list_values.length) got[f] = x.pick_list_values.map(function(p) { return String(p.display_value === null || p.display_value === undefined ? "" : p.display_value); }).filter(function(s) { return s !== ""; });
+            });
+        }
+    } catch (e) { console.error("選択肢の取得エラー:", e); }
+    ddPicks = got || false;
+    ddPicksLoading = false;
+    if (!ddPicks) return;
+    // 開いている一覧の文字のままの欄を選択欄に替える
+    var body = document.getElementById("dd-body");
+    if (!body) return;
+    body.querySelectorAll("td[data-pf]").forEach(function(td) {
+        var f = td.getAttribute("data-pf"), rec = ddCurRecs[td.getAttribute("data-id")];
+        if (!rec || !ddPicks[f]) return;
+        var tmp = document.createElement("tbody");
+        tmp.innerHTML = "<tr>" + ddEditCell(rec, f) + "</tr>";
+        td.parentNode.replaceChild(tmp.firstChild.firstChild, td);
+    });
+    ddBindEdits(body);
 }
 
 // お客様名（商談名）が COQL で返らなかったときだけ、商談を 50 件ずつ読んで埋める（読み取りだけ）
