@@ -830,45 +830,72 @@ function biOpenPage() {
 }
 function biStatus(text, kind) { var el = document.getElementById("bi-status"); if (el) { el.textContent = text; el.className = kind ? "bi-" + kind : ""; } }
 
+// その店舗の担当者を接客から決める（Masters の所属店舗は空のため）。選んだ月の1日の90日前〜月末（今日より先は今日まで）に
+// その店舗の接客に出てきた ServicePerson を、接客の件数の多い順に [{ id, name, count }]
+async function biStaffFromServices(month, store) {
+    var p = (month + "-01").split("-").map(Number), d = new Date(Date.UTC(p[0], p[1] - 1, p[2]));
+    d.setUTCDate(d.getUTCDate() - 90);
+    var from = d.toISOString().slice(0, 10), to = minStr(lastDayOfMonth(month), getToday());
+    if (to < from) return [];
+    var where = "ServiceStore = '" + coqlStr(store) + "' and VisitedDateTime between '" + from + "T00:00:00+09:00' and '" + to + "T23:59:59+09:00'";
+    var recs = await fetchServices(where, null, "Services", "ServicePerson, ServicePerson.Name");
+    var map = {}, list = [];
+    recs.forEach(function(r) {
+        var id = r.ServicePerson && typeof r.ServicePerson === "object" ? r.ServicePerson.id : r.ServicePerson;
+        if (!id) return;
+        id = String(id);
+        if (!map[id]) { map[id] = { id: id, name: personMap[id] || r["ServicePerson.Name"] || (r.ServicePerson && r.ServicePerson.name) || ("ID:" + id), count: 0 }; list.push(map[id]); }
+        map[id].count++;
+    });
+    list.sort(function(a, b) { return b.count - a.count || String(a.name).localeCompare(String(b.name), "ja"); });
+    return list;
+}
+// Masters の status（id → 値）。50件ずつ。読めなければ空（＝誰も除かない）
+async function biMastersStatus(ids) {
+    var out = {};
+    for (var i = 0; i < ids.length; i += 50) {
+        var chunk = ids.slice(i, i + 50).filter(function(id) { return /^\d+$/.test(id); });
+        if (!chunk.length) continue;
+        try {
+            var rows = await fetchServices("id in (" + chunk.join(", ") + ")", null, "Masters", "id, Name, status");
+            rows.forEach(function(m) { if (m && m.id) out[String(m.id)] = String(m.status || ""); });
+        } catch (e) { console.error("担当者の在籍の確認エラー:", e); }
+    }
+    return out;
+}
 async function biLoad() {
     var month = document.getElementById("bi-month").value, store = document.getElementById("bi-store").value;
     var box = document.getElementById("budget-table-container");
     var seq = ++biState.seq;
     biState = { month: month, store: store, rows: [], seq: seq };
     if (!month || !store) { box.innerHTML = ""; biStatus(month ? "店舗を選ぶと表が出ます" : "", ""); return; }
-    biStatus("読み込み中…", "");
+    biStatus("担当者を読み込み中…", "");
     box.innerHTML = "";
-    var budRows = null, masters = null, errs = [];
+    var budRows = null, staff = null, errs = [];
     var got = await Promise.all([
         querySalesBudgets(month, store).catch(function(e) { errs.push("予算の読み込みに失敗しました（" + ((e && (e.message || e.code)) || e) + "）"); return null; }),
-        fetchServices("Category = '担当者' and Store = '" + coqlStr(store) + "'", null, "Masters", "id, Name, Store, status, Category").catch(function(e) { errs.push("担当者の読み込みに失敗しました（" + ((e && (e.message || e.code)) || e) + "）"); return null; })
+        biStaffFromServices(month, store).catch(function(e) { errs.push("担当者の読み込みに失敗しました（" + ((e && (e.message || e.code)) || e) + "）"); return null; })
     ]);
     if (seq !== biState.seq) return;
-    budRows = got[0]; masters = got[1];
+    budRows = got[0]; staff = got[1];
     if (budRows === null) { biStatus(errs.join(" ／ "), "err"); return; } // 予算が読めないまま入れると重複して作るので、表を出さない
 
     var rows = [], byStaff = {}, storeRow = null;
     function addRow(id, name, note) { var r = { staffId: id, name: name, note: note || "", rec: null, chain: Promise.resolve() }; rows.push(r); if (id) byStaff[id] = r; return r; }
     var budByStaff = {};
     budRows.forEach(function(b) { var id = budStaffId(b); if (id) budByStaff[id] = b; else storeRow = storeRow || b; });
-    // 1. その店舗の担当者（Masters）。退職は除く（その月に予算の行がある人は出す）
-    (masters || []).slice().sort(function(a, b) { return String(a.Name || "").localeCompare(String(b.Name || ""), "ja"); }).forEach(function(m) {
-        var id = String(m.id), retired = String(m.status || "") === "退職";
-        if (retired && !budByStaff[id]) return;
-        addRow(id, m.Name || ("ID:" + id), retired ? "退職" : "");
+    // 1. 直近90日にこの店舗の接客に出てきた担当者（件数の多い順）。Masters で退職の人は除く（その月に予算の行がある人は出す）
+    var sIds = (staff || []).map(function(x) { return x.id; });
+    Object.keys(budByStaff).forEach(function(id) { if (sIds.indexOf(id) === -1) sIds.push(id); });
+    var status = sIds.length ? await biMastersStatus(sIds) : {};
+    if (seq !== biState.seq) return;
+    (staff || []).forEach(function(x) {
+        var retired = status[x.id] === "退職";
+        if (retired && !budByStaff[x.id]) return;
+        addRow(x.id, x.name, retired ? "退職" : "");
     });
-    // 2. この月この店舗の接客に出てくる担当者で、Masters の店舗が違う・空の人（表の月と同じときだけ分かる）
-    if (curRange && curRange.month === month) {
-        var normStore = {}; Object.keys(staffStoreMap).forEach(function(k) { normStore[normName(k)] = staffStoreMap[k]; });
-        (allData || []).forEach(function(r) {
-            var id = r.ServicePerson && r.ServicePerson.id ? String(r.ServicePerson.id) : null;
-            if (!id || byStaff[id]) return;
-            if (normStore[normName(personName(r))] !== store) return;
-            addRow(id, personName(r), "所属店舗が違う");
-        });
-    }
-    // 3. 予算の行があるのに上に出ていない人
-    Object.keys(budByStaff).forEach(function(id) { if (!byStaff[id]) addRow(id, budStaffName(budByStaff[id]), "所属店舗が違う"); });
+    // 2. その月に予算の行があるのに上に出てこない人
+    Object.keys(budByStaff).forEach(function(id) { if (!byStaff[id]) addRow(id, budStaffName(budByStaff[id]), status[id] === "退職" ? "退職" : ""); });
     rows.forEach(function(r) { if (r.staffId && budByStaff[r.staffId]) r.rec = budByStaff[r.staffId]; });
     // 4. 店舗全体（担当者なし）
     var sr = addRow(null, "（担当者に割り振らない分）", "担当者の合計に上乗せして数えます"); sr.rec = storeRow;
