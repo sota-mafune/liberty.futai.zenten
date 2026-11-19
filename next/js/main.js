@@ -517,7 +517,7 @@ function renderCell(s, r, isT) {
     // 2. 達成率（分母の予算が未登録・0 なら「-」）
     if(r.type === "total_ratio" || r.type === "del_total_ratio") {
         var act = (s[r.n+"_k"] || 0) + (s[r.n+"_f"] || 0);
-        var bud = s[r.d] || 0;
+        var bud = Math.round(s[r.d] || 0); // 表示している予算（四捨五入した整数）で割る。0 なら「-」
         tVal = ((r.flag && !s[r.flag]) || bud <= 0) ? "-" : fmtPct(act, bud);
         return singleCell(c, cellStyle, tVal, "");
     }
@@ -1099,8 +1099,8 @@ function ddSpec(s, r) {
     if (t === "total_only" || t === "total_dash" || t === "diff_total") return null;
     if ((t === "ly_val" || t === "ly_ratio") && !lyAvailable) return null;
     if (t === "total_ratio" || t === "del_total_ratio") {
-        if ((r.flag && !s[r.flag]) || (s[r.d] || 0) <= 0) return null; // 表示が「-」
-        return { nums: [r.n], amount: DD_AMOUNT_FIELD[r.n] || null, denom: function() { return { label: "分母（予算）", value: (s[r.d] || 0).toLocaleString(), unit: "" }; } };
+        if ((r.flag && !s[r.flag]) || Math.round(s[r.d] || 0) <= 0) return null; // 表示が「-」（renderCell と同じく四捨五入した予算で判定）
+        return { nums: [r.n], amount: DD_AMOUNT_FIELD[r.n] || null, denom: function() { return { label: "分母（予算）", value: Math.round(s[r.d] || 0).toLocaleString(), unit: "" }; } };
     }
     if (t && (t.indexOf("arari") === 0 || t.indexOf("del_arari") === 0)) {
         var isDel = t.indexOf("del_") === 0;
