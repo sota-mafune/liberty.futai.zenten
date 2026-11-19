@@ -68,3 +68,23 @@ th, td {
 .force-red { color: #ff0000 !important; }
 #loading { padding: 20px; color: #e67e22; font-weight: bold; }
 .page-content { display: none; } .page-content.active { display: block; }
+
+/* 押すと案件の一覧が出るセル（大きさ・文字は変えず、カーソルとホバーの色だけ） */
+td.dd-cell { cursor: pointer; }
+td.dd-cell:hover { filter: brightness(0.92); }
+td.dd-cell .val-kei:hover, td.dd-cell .val-fu:hover { text-decoration: underline; }
+
+/* 案件の一覧（画面の上にかぶせる） */
+#dd-overlay { position: fixed; inset: 0; z-index: 5000; background: rgba(0,0,0,0.35); display: none; align-items: center; justify-content: center; }
+#dd-box { background: #fff; width: 92vw; max-width: 1200px; max-height: 88vh; display: flex; flex-direction: column; border-radius: 6px; box-shadow: 0 6px 24px rgba(0,0,0,0.3); font-size: 12px; }
+#dd-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: #44546a; color: #fff; border-radius: 6px 6px 0 0; }
+#dd-title { font-weight: bold; font-size: 13px; white-space: normal; }
+#dd-close { background: transparent; color: #fff; border: none; font-size: 20px; line-height: 1; cursor: pointer; padding: 0 4px; }
+#dd-sub { padding: 6px 14px; color: #333; border-bottom: 1px solid #d9d9d9; line-height: 1.6; }
+#dd-body { overflow: auto; flex: 1 1 auto; min-height: 60px; }
+#dd-box table.dd-table { width: 100%; table-layout: auto !important; border-collapse: collapse; }
+#dd-box .dd-table th, #dd-box .dd-table td { width: auto !important; min-width: 0 !important; max-width: none !important; overflow: visible; padding: 4px 8px; text-align: left; font-size: 12px; }
+#dd-box .dd-table th { position: sticky; top: 0; background: #f2f2f2; z-index: 1; }
+#dd-box .dd-table td.dd-num { text-align: right; }
+#dd-box .dd-table tbody tr[data-id] { cursor: pointer; }
+#dd-box .dd-table tbody tr[data-id]:hover { background: #eef4fb; }

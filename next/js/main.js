@@ -23,7 +23,7 @@ GROUP_ORDER.forEach(function(g) { (GROUP_STORES[g] || []).forEach(function(st) {
 function groupOf(st) { return storeToGroup[st] || OTHER_GROUP; }
 
 // COQL で読む項目。担当者名は lookup の先（Masters の Name）を一緒に取る
-var SELECT_FIELDS = "ClosingDay, VisitedDateTime, nousyayoteibi, SyaryouCategory, FOrR, Seated, Option1, ServiceStore, ServicePerson, ServicePerson.Name, cancel, HanbaiCategory, Option2, Option3, Option15, Option4, Option5, Option16, Option7, Option8, Option9, Option10, Option6, BackCamera, Option17, TradeinCar, PaymentCategory, arari16, arari17, Option14, arari21, arari22, arari23, arari24, arari25";
+var SELECT_FIELDS = "ClosingDay, VisitedDateTime, nousyayoteibi, SyaryouCategory, FOrR, Seated, Option1, ServiceStore, ServicePerson, ServicePerson.Name, cancel, HanbaiCategory, Option2, Option3, Option15, Option4, Option5, Option16, Option7, Option8, Option9, Option10, Option6, BackCamera, Option17, TradeinCar, PaymentCategory, arari16, arari17, Option14, arari21, arari22, arari23, arari24, arari25, Name, ManagementNum, Deal_Name";
 
 // 集計の期間（renderAll の中で使う）
 var curRange = null;
@@ -71,24 +71,36 @@ var loadFailed = false; // 直近の読み込みが失敗したら true（フィ
 function isStale(seq) { return seq !== fetchSeq; }
 
 // COQL を全ページ読む。失敗したら例外を投げる（握りつぶさない）。新しい呼び出しが始まったら null を返して打ち切る
-// 1回で読む件数。COQL の上限 2000 件で読み、通らなければ 200 件に落とす
-var COQL_PAGE = 2000;
+// ウィジェットの COQL は1回 200 件まで（2026-11-19 実測。2000 は通らない）。COQL_PAR 回分を同時に読む
+// ページの並びがずれないよう id 順で読み、id で重複を除く。order by が通らなければ外して読み直す
+var COQL_PAGE = 200, COQL_PAR = 4, COQL_ORDER = " order by id";
+async function coqlPage(where, offset) {
+    for (var attempt = 0; attempt < 2; attempt++) {
+        var res;
+        try { res = await ZOHO.CRM.API.coql({ "select_query": "select " + SELECT_FIELDS + " from Services where " + where + COQL_ORDER + " limit " + offset + ", " + COQL_PAGE }); }
+        catch (e) { if (COQL_ORDER && attempt === 0) { COQL_ORDER = ""; continue; } throw e; }
+        if (res && Array.isArray(res.data)) return { rows: res.data, more: !!(res.info && res.info.more_records) };
+        var bad = res && typeof res === "object" && (res.code || res.status === "error" || res.message);
+        if (!bad) return { rows: [], more: false }; // 0件
+        if (COQL_ORDER && attempt === 0) { COQL_ORDER = ""; continue; }
+        throw new Error(res.code || res.message || "COQL error");
+    }
+}
 async function fetchServices(where, seq) {
-    var out = [], offset = 0;
+    var out = [], seen = {}, offset = 0;
     while (true) {
-        var res, err = null;
-        try { res = await ZOHO.CRM.API.coql({ "select_query": "select " + SELECT_FIELDS + " from Services where " + where + " limit " + offset + ", " + COQL_PAGE }); } catch (e) { err = e; }
+        var offs = [];
+        for (var i = 0; i < COQL_PAR; i++) offs.push(offset + i * COQL_PAGE);
+        var pages = await Promise.all(offs.map(function(o) { return coqlPage(where, o); }));
         if (isStale(seq)) return null;
-        if (!err && res && Array.isArray(res.data)) {
-            out = out.concat(res.data);
-            if (res.info && res.info.more_records) { offset += COQL_PAGE; continue; }
-            break;
+        var more = false;
+        for (var j = 0; j < pages.length; j++) {
+            pages[j].rows.forEach(function(r) { var k = r.id || JSON.stringify(r); if (!seen[k]) { seen[k] = true; out.push(r); } });
+            more = pages[j].more;
+            if (!more) break;
         }
-        var bad = err || (res && typeof res === "object" && (res.code || res.status === "error" || res.message));
-        if (bad && COQL_PAGE > 200 && offset === 0) { COQL_PAGE = 200; continue; } // 2000 件が通らない版の API なら 200 件で読み直す
-        if (err) throw err;
-        if (bad) throw new Error(res.code || res.message || "COQL error");
-        break; // 0件
+        if (!more) break;
+        offset += COQL_PAR * COQL_PAGE;
     }
     return out;
 }
@@ -167,7 +179,26 @@ async function fetchAnalyticsBudgets() {
 
 var STAT_BASES = ["j", "v_n", "sho", "ab", "jk", "rv", "rj", "tot_v", "n", "m", "c", "o2", "o3", "pk", "ct", "up", "tp", "ic", "rst", "ni", "nu", "hp", "fl", "aq", "tr", "ln", "l84", "r69", "r59", "r49", "r39", "r29", "low", "zn", "ar21", "ar22", "ar23", "ar24", "ar25", "ar_cnt", "del_cnt", "del_ar21", "del_ar22", "del_ar23", "del_ar24", "del_ar25", "ly_j", "ly_jt", "ly_vt"];
 // budget_rows: 月次予算の行数（0 なら「未登録」）、daily_rows: その月の日次予算の行数
-function createStats() { var s = { budget_n:0, budget_ar:0, budget_j:0, budget_current:0, budget_rows:0, daily_rows:0, g_sls:0 }; STAT_BASES.forEach(function(b) { s[b + "_k"] = 0; s[b + "_f"] = 0; }); return s; }
+function createStats() { var s = { budget_n:0, budget_ar:0, budget_j:0, budget_current:0, budget_rows:0, daily_rows:0, g_sls:0 }; STAT_BASES.forEach(function(b) { s[b + "_k"] = 0; s[b + "_f"] = 0; }); s.__recs = {}; return s; }
+
+// --- 数字の内訳（どの案件を数えたか）を覚える。数は変えず、足した案件の参照を持つだけ ---
+// s.__recs["j_k"] = Set(案件)。数の列（typeof number）だけを合算する処理には混ざらない
+var STAT_KEYS = []; STAT_BASES.forEach(function(b) { STAT_KEYS.push(b + "_k", b + "_f"); });
+// 件数が増えたら、同じ条件で += した金額の列にも同じ案件を覚えさせる（金額が 0 でも残す）
+var REC_AMOUNT_WITH = { ar_cnt: ["ar21", "ar22", "ar23", "ar24", "ar25"], del_cnt: ["del_ar21", "del_ar22", "del_ar23", "del_ar24", "del_ar25"] };
+function statsSnap(s) { var o = {}; for (var i = 0; i < STAT_KEYS.length; i++) o[STAT_KEYS[i]] = s[STAT_KEYS[i]]; return o; }
+function noteRec(s, key, rec) { var m = s.__recs || (s.__recs = {}); var set = m[key] || (m[key] = new Set()); set.add(rec); }
+function noteChanged(s, before, rec) {
+    for (var i = 0; i < STAT_KEYS.length; i++) {
+        var k = STAT_KEYS[i];
+        if (s[k] === before[k]) continue;
+        noteRec(s, k, rec);
+        var suf = k.slice(-2), base = k.slice(0, -2);
+        if (REC_AMOUNT_WITH[base]) REC_AMOUNT_WITH[base].forEach(function(a) { noteRec(s, a + suf, rec); });
+    }
+}
+// 列の合計（店舗別・担当者別の「合計」）に、足し合わせた列の案件を集める
+function mergeRecs(t, s) { var src = s.__recs || {}; Object.keys(src).forEach(function(k) { src[k].forEach(function(rec) { noteRec(t, k, rec); }); }); }
 
 // コーティング・室内コート・防錆コート・ナビアップ・希望ナンバーは「空・✖・×・-None-」以外ならすべて獲得
 function isGot(v) { if (v === null || v === undefined) return false; v = String(v).trim(); return ["", "✖", "×", "-None-"].indexOf(v) === -1; }
@@ -175,6 +206,7 @@ function catOf(rec) { return (rec.SyaryouCategory === "軽" || rec.SyaryouCatego
 function isCancelled(rec) { return rec.cancel === true || rec.cancel === "true"; }
 
 function aggregate(s, rec) {
+    var recBefore = statsSnap(s); // 内訳用（数の計算には使わない）
     var c = catOf(rec);
     var vD = (rec.VisitedDateTime || "").split('T')[0],
         cD = (rec.ClosingDay || ""),
@@ -226,6 +258,7 @@ function aggregate(s, rec) {
         s["del_ar24_" + c] += (parseFloat(rec.arari24) || 0);
         s["del_ar25_" + c] += (parseFloat(rec.arari25) || 0);
     }
+    noteChanged(s, recBefore, rec);
 }
 
 // 昨年: ly_j = 前年の同じ月の成約台数、ly_jt = 前年の開始日〜min(終了日,今日)の1年前までの成約台数、ly_vt = 同じ期間の新規接客数
@@ -233,11 +266,13 @@ function aggregateLY(s, rec) {
     var c = catOf(rec);
     var vD = (rec.VisitedDateTime || "").split('T')[0], cD = (rec.ClosingDay || ""), isCancel = isCancelled(rec);
     var R = curRange;
+    var recBefore = statsSnap(s); // 内訳用（数の計算には使わない）
     if (cD && !isCancel) {
         if (cD >= R.lyMonthStart && cD <= R.lyMonthEnd) s["ly_j_"+c]++;
         if (cD >= R.lyStart && cD <= R.lyCutEnd) s["ly_jt_"+c]++;
     }
     if (vD && vD >= R.lyStart && vD <= R.lyCutEnd && rec.FOrR === "初回") s["ly_vt_"+c]++;
+    noteChanged(s, recBefore, rec);
 }
 
 // 半角・全角の空白をすべて除いた名前（照合用）
@@ -387,6 +422,8 @@ function buildTable(sum, title, totalS, kind) {
         { lbl: "総粗利保証込予算", m: "budget_ar", type: "total_only", flag: "budget_rows", cls: "#d9ead3" },
         { lbl: "達成率", type: "del_total_ratio", n: "del_ar25", d: "budget_ar", flag: "budget_rows", cls: "#d9ead3" }
     ];
+    // セルを押したときに案件の一覧を出すため、この表の列と行の定義を覚えておく
+    tableCtx[kind] = { sum: sum, keys: keys, totalS: totalS, rowDef: rowDef };
 
     for(var j=0; j<rowDef.length; j++){
         var r = rowDef[j];
@@ -396,8 +433,8 @@ function buildTable(sum, title, totalS, kind) {
             h += "</tr>";
         } else {
             h += "<tr><td class='sticky-col-item' style='background-color:"+(r.cls||"#fff")+"'>"+r.lbl+"</td>";
-            h += renderCell(totalS, r, true);
-            for(var k=0; k<keys.length; k++) h += renderCell(sum[keys[k]], r, false);
+            h += markCell(renderCell(totalS, r, true), totalS, r, kind, j, -1);
+            for(var k=0; k<keys.length; k++) h += markCell(renderCell(sum[keys[k]], r, false), sum[keys[k]], r, kind, j, k);
             h += "</tr>";
         }
     }
@@ -519,5 +556,200 @@ function renderCell(s, r, isT) {
 }
 
 function showPage(id) { document.querySelectorAll('.page-content').forEach(function(p){ p.classList.remove('active'); }); document.getElementById(id).classList.add('active'); document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); }); var btnId = 'btn-' + id.replace('-page', ''); var btn = document.getElementById(btnId); if(btn) btn.classList.add('active'); document.getElementById('group-filter-area').style.display = (id === 'store-page') ? 'block' : 'none'; document.getElementById('staff-filter-area').style.display = (id === 'staff-page') ? 'block' : 'none'; }
-function filterStoreByGroup() { if (loadFailed) { document.getElementById("store-table-container").innerHTML = ""; return; } var g = document.getElementById('group-selector').value, f = {}, t = createStats(); Object.keys(storeStatsMaster).forEach(function(st){ if (g === "all" || storeGroupMap[st] === g) { f[st] = storeStatsMaster[st]; Object.keys(t).forEach(function(k){ if(typeof t[k] === 'number') t[k] += storeStatsMaster[st][k]; }); } }); document.getElementById("store-table-container").innerHTML = buildTable(f, "店舗名", t, "store"); }
-function filterStaffByStore() { if (loadFailed) { document.getElementById("staff-table-container").innerHTML = ""; return; } var s = document.getElementById('store-selector').value, f = {}, t = createStats(); Object.keys(staffStatsMaster).forEach(function(n){ if (s === "all" || staffStoreMap[n] === s) { f[n] = staffStatsMaster[n]; Object.keys(t).forEach(function(k){ if(typeof t[k] === 'number') t[k] += staffStatsMaster[n][k]; }); } }); document.getElementById("staff-table-container").innerHTML = buildTable(f, "担当者名", t, "staff"); }
+function filterStoreByGroup() { if (loadFailed) { document.getElementById("store-table-container").innerHTML = ""; return; } var g = document.getElementById('group-selector').value, f = {}, t = createStats(); Object.keys(storeStatsMaster).forEach(function(st){ if (g === "all" || storeGroupMap[st] === g) { f[st] = storeStatsMaster[st]; Object.keys(t).forEach(function(k){ if(typeof t[k] === 'number') t[k] += storeStatsMaster[st][k]; }); mergeRecs(t, storeStatsMaster[st]); } }); document.getElementById("store-table-container").innerHTML = buildTable(f, "店舗名", t, "store"); }
+function filterStaffByStore() { if (loadFailed) { document.getElementById("staff-table-container").innerHTML = ""; return; } var s = document.getElementById('store-selector').value, f = {}, t = createStats(); Object.keys(staffStatsMaster).forEach(function(n){ if (s === "all" || staffStoreMap[n] === s) { f[n] = staffStatsMaster[n]; Object.keys(t).forEach(function(k){ if(typeof t[k] === 'number') t[k] += staffStatsMaster[n][k]; }); mergeRecs(t, staffStatsMaster[n]); } }); document.getElementById("staff-table-container").innerHTML = buildTable(f, "担当者名", t, "staff"); }
+
+// ===== 数字のセルを押すと、その数字に数えた案件（接客）の一覧を出す =====
+// 表の数字の計算には関わらない。aggregate / aggregateLY が覚えた s.__recs を読むだけ
+var tableCtx = {};      // kind（group / store / staff）→ その表の列・行の定義
+var dealNameMap = {};   // 商談 id → 商談名（お客様名）。COQL で名前が返らなかった分だけ、一覧を開いたときに読む
+var ddSeq = 0;          // 一覧を開いた番号。閉じた・開き直した後に、前の読み込みの結果を書かない
+var DD_KIND_LABEL = { group: "グループ", store: "店舗", staff: "担当者" };
+var DD_VISIT_KEYS = ["tot_v", "v_n", "sho", "ab", "jk", "rv", "ly_vt"]; // 来店日で数えた列（ほかは成約日、del_ は納車日）
+var DD_AMOUNT_FIELD = { ar21: "arari21", ar22: "arari22", ar23: "arari23", ar24: "arari24", ar25: "arari25", del_ar21: "arari21", del_ar22: "arari22", del_ar23: "arari23", del_ar24: "arari24", del_ar25: "arari25" };
+var DD_AMOUNT_LABEL = { arari21: "車両粗利", arari22: "下取粗利", arari23: "ローンBK", arari24: "全部割(保証抜き)", arari25: "全部割(保証込み)" };
+
+function escHtml(v) { return String(v === null || v === undefined ? "" : v).replace(/[&<>"']/g, function(ch) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]; }); }
+function recSet(s, key) { return (s && s.__recs && s.__recs[key]) || null; }
+function cntKF(s, key, cat) { var k = s[key + "_k"] || 0, f = s[key + "_f"] || 0; return cat === "k" ? k : (cat === "f" ? f : k + f); }
+
+// 行の定義から「どの列の案件を出すか」を決める。案件に結びつかないセル（予算・目標・「-」・未登録・追客可能数）は null
+function ddSpec(s, r) {
+    if (!r || r.sec || r.m === "empty") return null;
+    var t = r.type;
+    if (t === "total_only" || t === "total_dash" || t === "diff_total") return null;
+    if ((t === "ly_val" || t === "ly_ratio") && !lyAvailable) return null;
+    if (t === "total_ratio" || t === "del_total_ratio") {
+        if ((r.flag && !s[r.flag]) || (s[r.d] || 0) <= 0) return null; // 表示が「-」
+        return { nums: [r.n], amount: DD_AMOUNT_FIELD[r.n] || null, denom: function() { return { label: "分母（予算）", value: (s[r.d] || 0).toLocaleString(), unit: "" }; } };
+    }
+    if (t && (t.indexOf("arari") === 0 || t.indexOf("del_arari") === 0)) {
+        var isDel = t.indexOf("del_") === 0;
+        var cnt = /_val$/.test(t) ? r.val : (isDel ? "del_cnt" : "ar_cnt");
+        return { nums: [cnt], amount: DD_AMOUNT_FIELD[r.val] || null };
+    }
+    if (t === "ratio") return { nums: [r.n], denom: function(cat) { return { label: "分母", value: (cat === "t" && r.d2) ? sumKeys(s, r.d2, "_k") + sumKeys(s, r.d2, "_f") : cntKF(s, r.d, cat), unit: "件" }; } };
+    if (t === "custom_ratio") return { nums: [r.n], denom: function(cat) { return { label: "分母", value: cntKF(s, r.d_sub[0], cat) - cntKF(s, r.d_sub[1], cat), unit: "件" }; } };
+    if (t === "ly_ratio") return { nums: [r.n], denom: function(cat) { return { label: "分母", value: cntKF(s, r.d, cat), unit: "件" }; } };
+    if (t === "sum") return { nums: r.items, items: true };
+    if (t === "sum_ratio") return { nums: r.items, items: true, denom: function(cat) { return { label: "分母", value: cntKF(s, r.d, cat), unit: "件" }; } };
+    if (t === "ly_val" || !t) return r.m ? { nums: [r.m] } : null;
+    return null;
+}
+function ddHasRecs(s, sp) { for (var i = 0; i < sp.nums.length; i++) { var a = recSet(s, sp.nums[i] + "_k"), b = recSet(s, sp.nums[i] + "_f"); if ((a && a.size) || (b && b.size)) return true; } return false; }
+
+// 押せるセルに印（data-dd="kind|行|列"、合計列は -1）と class を付ける。セルの中身・大きさは変えない
+function markCell(html, s, r, kind, j, k) {
+    var sp = ddSpec(s, r);
+    if (!sp || !ddHasRecs(s, sp)) return html;
+    return html.replace("<td class='", "<td data-dd='" + kind + "|" + j + "|" + k + "' class='dd-cell ");
+}
+
+// 案件 → その案件を数えた列（sum の行では複数になる）
+function ddCollect(s, sp, cat) {
+    var sufs = cat === "t" ? ["_k", "_f"] : ["_" + cat], map = new Map();
+    sp.nums.forEach(function(key) { sufs.forEach(function(suf) { var set = recSet(s, key + suf); if (set) set.forEach(function(rec) { var a = map.get(rec); if (!a) { a = []; map.set(rec, a); } if (a.indexOf(key) === -1) a.push(key); }); }); });
+    return map;
+}
+function ddKeyLabel(rowDef, key) {
+    var i, x;
+    for (i = 0; i < rowDef.length; i++) { x = rowDef[i]; if (x.m === key && (!x.type || x.type === "ly_val")) return x.lbl; }
+    for (i = 0; i < rowDef.length; i++) { x = rowDef[i]; if (x.val === key && /_(val|sum)$/.test(x.type || "")) return x.lbl; }
+    return key;
+}
+function ddItemLabel(rowDef, key) { var l = ddKeyLabel(rowDef, key); return /^[\d.]+$/.test(l) ? "金利" + l : l; }
+function ddRowLabel(rowDef, r) {
+    var ref = null;
+    if (["ratio", "custom_ratio", "ly_ratio", "total_ratio", "del_total_ratio"].indexOf(r.type) !== -1) ref = ddKeyLabel(rowDef, r.n);
+    if (r.type === "sum_ratio") rowDef.forEach(function(x) { if (!ref && x.type === "sum" && x.items && x.items.join() === r.items.join()) ref = x.lbl; });
+    return (ref && ref !== r.lbl) ? r.lbl + "（" + ref + "）" : r.lbl;
+}
+function ddDateOf(rec, key) {
+    if (DD_VISIT_KEYS.indexOf(key) !== -1) return (rec.VisitedDateTime || "").split("T")[0];
+    if (key.indexOf("del_") === 0) return (rec.nousyayoteibi || "").split("T")[0];
+    return rec.ClosingDay || "";
+}
+function ddDealName(rec) { var d = rec.Deal_Name; if (!d) return ""; if (typeof d === "object") return d.name || dealNameMap[d.id] || ""; return String(d); }
+function ddNum(v) { return parseFloat(v) || 0; }
+
+function ddOpenFromCell(dd, cat) {
+    var p = String(dd || "").split("|"), ctx = tableCtx[p[0]];
+    if (!ctx) return;
+    var r = ctx.rowDef[parseInt(p[1], 10)], k = parseInt(p[2], 10);
+    var s = k === -1 ? ctx.totalS : ctx.sum[ctx.keys[k]];
+    if (!r || !s) return;
+    var sp = ddSpec(s, r);
+    if (!sp) return;
+    if (cat !== "k" && cat !== "f") cat = "t";
+
+    var map = ddCollect(s, sp, cat), sortKey = sp.nums[0];
+    var list = Array.from(map.keys());
+    list.sort(function(a, b) {
+        var da = ddDateOf(a, sortKey), db = ddDateOf(b, sortKey);
+        if (da !== db) { if (!da) return 1; if (!db) return -1; return da < db ? -1 : 1; }
+        return String(a.Name || "").localeCompare(String(b.Name || ""), "ja");
+    });
+
+    // 見出し: どの列・どの行・件数
+    var colName = k === -1 ? "合計" : ctx.keys[k];
+    var colKind = k === -1 ? "" : (DD_KIND_LABEL[p[0]] || "") + ": ";
+    var catLabel = cat === "k" ? "軽" : (cat === "f" ? "普" : "軽・普の合計");
+    var title = colKind + colName + " ／ " + ddRowLabel(ctx.rowDef, r) + " ／ " + catLabel + " ／ " + list.length.toLocaleString() + "件";
+
+    var itemTotal = 0; map.forEach(function(a) { itemTotal += a.length; });
+    var subs = [];
+    if (sp.denom) {
+        var dn = sp.denom(cat);
+        var numTxt = sp.items ? "分子 " + itemTotal.toLocaleString() + "個（案件 " + list.length.toLocaleString() + "件）" : "分子 " + list.length.toLocaleString() + "件";
+        subs.push(numTxt + " / " + dn.label + " " + (typeof dn.value === "number" ? dn.value.toLocaleString() : dn.value) + dn.unit);
+    } else if (sp.items) {
+        subs.push("付帯の数 " + itemTotal.toLocaleString() + "個（案件 " + list.length.toLocaleString() + "件）");
+    }
+    if (sp.amount) {
+        var amt = 0; list.forEach(function(rec) { amt += ddNum(rec[sp.amount]); });
+        subs.push(DD_AMOUNT_LABEL[sp.amount] + "の合計 " + Math.round(amt).toLocaleString() + " ／ 1台あたり " + (list.length ? Math.round(amt / list.length) : 0).toLocaleString());
+    }
+    subs.push("行を押すと接客のレコードを開きます");
+
+    var h = "<table class='dd-table'><thead><tr><th>接客番号</th><th>管理番号</th><th>お客様名</th><th>来店日</th><th>成約日</th><th>納車日</th><th>店舗</th><th>担当者</th><th>軽/普</th>";
+    if (sp.items) h += "<th>数えた項目</th>";
+    if (sp.amount) h += "<th>" + escHtml(DD_AMOUNT_LABEL[sp.amount]) + "</th>";
+    h += "</tr></thead><tbody>";
+    list.forEach(function(rec) {
+        var dealId = rec.Deal_Name && typeof rec.Deal_Name === "object" ? String(rec.Deal_Name.id || "") : "";
+        var dn = ddDealName(rec);
+        h += "<tr data-id='" + escHtml(rec.id) + "'>";
+        h += "<td>" + escHtml(rec.Name || "") + "</td><td>" + escHtml(rec.ManagementNum || "") + "</td>";
+        h += "<td" + (dealId && !dn ? " data-deal='" + escHtml(dealId) + "'" : "") + ">" + escHtml(dn || (dealId ? "…" : "")) + "</td>";
+        h += "<td>" + escHtml((rec.VisitedDateTime || "").split("T")[0]) + "</td><td>" + escHtml(rec.ClosingDay || "") + "</td><td>" + escHtml((rec.nousyayoteibi || "").split("T")[0]) + "</td>";
+        h += "<td>" + escHtml(rec.ServiceStore || "") + "</td><td>" + escHtml(personName(rec)) + "</td><td>" + (catOf(rec) === "k" ? "軽" : "普") + "</td>";
+        if (sp.items) h += "<td>" + escHtml(map.get(rec).map(function(key) { return ddItemLabel(ctx.rowDef, key); }).join("・")) + "</td>";
+        if (sp.amount) h += "<td class='dd-num'>" + escHtml(ddNum(rec[sp.amount]).toLocaleString()) + "</td>";
+        h += "</tr>";
+    });
+    if (list.length === 0) h += "<tr><td colspan='" + (9 + (sp.items ? 1 : 0) + (sp.amount ? 1 : 0)) + "'>該当する案件はありません</td></tr>";
+    h += "</tbody></table>";
+
+    var ov = ddEnsureModal();
+    document.getElementById("dd-title").textContent = title;
+    document.getElementById("dd-sub").innerHTML = subs.map(escHtml).join("<br>");
+    document.getElementById("dd-body").innerHTML = h;
+    document.getElementById("dd-body").scrollTop = 0;
+    ov.style.display = "flex";
+    var seq = ++ddSeq;
+    ddFillDealNames(list, seq);
+}
+
+function ddEnsureModal() {
+    var ov = document.getElementById("dd-overlay");
+    if (ov) return ov;
+    ov = document.createElement("div");
+    ov.id = "dd-overlay";
+    ov.innerHTML = "<div id='dd-box' role='dialog' aria-modal='true'><div id='dd-head'><div id='dd-title'></div><button type='button' id='dd-close' aria-label='閉じる'>×</button></div><div id='dd-sub'></div><div id='dd-body'></div></div>";
+    document.body.appendChild(ov);
+    ov.addEventListener("click", function(e) { if (e.target === ov) ddClose(); });
+    document.getElementById("dd-close").addEventListener("click", ddClose);
+    document.getElementById("dd-body").addEventListener("click", function(e) { var tr = e.target.closest ? e.target.closest("tr[data-id]") : null; if (tr) ddOpenRecord(tr.getAttribute("data-id")); });
+    return ov;
+}
+function ddClose() { var ov = document.getElementById("dd-overlay"); if (ov && ov.style.display !== "none") { ov.style.display = "none"; ddSeq++; } }
+function ddOpenRecord(id) {
+    if (!/^\d+$/.test(String(id || ""))) return;
+    try { var pr = ZOHO.CRM.UI.Record.open({ Entity: "Services", RecordID: id }); if (pr && pr.catch) pr.catch(function(e) { console.error("レコードを開けませんでした:", e); }); } catch (e) { console.error("レコードを開けませんでした:", e); }
+}
+
+// お客様名（商談名）が COQL で返らなかったときだけ、商談を 50 件ずつ読んで埋める（読み取りだけ）
+async function ddQueryDeals(ids) {
+    var forms = [ids.join(", "), ids.map(function(id) { return "'" + id + "'"; }).join(", ")];
+    for (var i = 0; i < forms.length; i++) {
+        try {
+            var res = await ZOHO.CRM.API.coql({ "select_query": "select Deal_Name from Deals where id in (" + forms[i] + ") limit 0, 50" });
+            if (res && Array.isArray(res.data)) return res.data;
+            if (res && typeof res === "object" && !res.code && !res.message && res.status !== "error") return []; // 0件
+        } catch (e) { if (i === forms.length - 1) console.error("お客様名の取得エラー:", e); }
+    }
+    return null;
+}
+async function ddFillDealNames(recs, seq) {
+    var ids = [];
+    recs.forEach(function(rec) { var d = rec.Deal_Name; if (d && typeof d === "object" && !d.name && d.id) { var id = String(d.id); if (/^\d+$/.test(id) && !(id in dealNameMap) && ids.indexOf(id) === -1) ids.push(id); } });
+    var failed = {};
+    for (var i = 0; i < ids.length; i += 50) {
+        var chunk = ids.slice(i, i + 50);
+        var data = await ddQueryDeals(chunk);
+        if (data) { data.forEach(function(x) { if (x && x.id) dealNameMap[String(x.id)] = x.Deal_Name || ""; }); chunk.forEach(function(id) { if (!(id in dealNameMap)) dealNameMap[id] = ""; }); }
+        else chunk.forEach(function(id) { failed[id] = true; });
+        if (seq !== ddSeq) return;
+    }
+    if (seq !== ddSeq) return;
+    document.querySelectorAll("#dd-body td[data-deal]").forEach(function(td) { var id = td.getAttribute("data-deal"); td.textContent = failed[id] ? "-" : (dealNameMap[id] || "-"); });
+}
+
+document.addEventListener("click", function(e) {
+    if (!e.target || !e.target.closest) return;
+    var td = e.target.closest("td.dd-cell");
+    if (!td) return;
+    var cat = e.target.closest(".val-kei") ? "k" : (e.target.closest(".val-fu") ? "f" : "t");
+    ddOpenFromCell(td.getAttribute("data-dd"), cat);
+});
+document.addEventListener("keydown", function(e) { if (e.key === "Escape" || e.key === "Esc") ddClose(); });
