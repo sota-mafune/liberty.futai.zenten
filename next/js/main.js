@@ -32,8 +32,37 @@ if (typeof ZOHO !== "undefined" && ZOHO.embeddedApp) {
     ZOHO.embeddedApp.init().then(function() {
         initMonthSelector();
         setInitialDates();
+        detectMyStore(); // 待たない（取れたら、表ができた後に1回だけ当てる）
         fetchByCOQL();
     });
+}
+
+// ===== サインインしている人の店舗（店舗用のアカウントはユーザー名＝店舗名）。店舗別・担当者別・日別・予算入力の最初の絞り込みに使う =====
+var myUserNames = null;   // 照合用の名前（空白を除いたもの）。null = まだ取れていない、[] = 取れなかった
+var myStore = null;       // 決まった店舗（表示名）。決まらなければ null（今どおり全店）
+var myStoreApplied = false;
+var biMyStoreUsed = false; // 予算入力で自分の店舗を最初の値に使ったか（1回だけ）
+async function detectMyStore() {
+    var names = [];
+    try {
+        var res = await ZOHO.CRM.CONFIG.getCurrentUser();
+        var u = res && Array.isArray(res.users) ? res.users[0] : (res && res.full_name !== undefined ? res : null);
+        if (u) [u.full_name, u.last_name, (u.first_name || "") + (u.last_name || ""), (u.last_name || "") + (u.first_name || "")].forEach(function(v) { var n = normName(v); if (n && names.indexOf(n) === -1) names.push(n); });
+    } catch (e) { console.error("ユーザーの取得エラー（全店で表示します）:", e); }
+    myUserNames = names;
+    applyMyStoreOnce();
+}
+// 表ができていて、名前が取れていれば1回だけ当てる。そのあとは人の選択を保つ（月を変えても戻さない）
+function applyMyStoreOnce() {
+    if (myStoreApplied || myUserNames === null || loadFailed || !curRange || !Object.keys(storeStatsMaster).length) return;
+    myStoreApplied = true;
+    var cands = STORE_ORDER.concat(Object.keys(storeStatsMaster));
+    for (var i = 0; i < cands.length && !myStore; i++) { if (cands[i] !== "未所属" && myUserNames.indexOf(normName(cands[i])) !== -1) myStore = cands[i]; }
+    if (!myStore) return;
+    function pick(id, v) { var sel = document.getElementById(id); if (sel && Array.prototype.some.call(sel.options, function(o) { return o.value === v; })) { sel.value = v; return true; } return false; }
+    pick("group-selector", groupOf(myStore)); filterStoreByGroup();
+    pick("store-selector", myStore); filterStaffByStore();
+    pick("daily-filter", "s:" + myStore); renderDaily();
 }
 
 function initMonthSelector() { var sel = document.getElementById('month-selector'); var now = new Date(); var curMonth = now.getFullYear() + "-" + ("0" + (now.getMonth() + 1)).slice(-2); for(var y=2025; y<=now.getFullYear() + 1; y++) { for(var m=1; m<=12; m++) { var v = y + "-" + (m < 10 ? "0" + m : m); var opt = document.createElement('option'); opt.value = v; opt.text = y + "/" + m; if(v === curMonth) opt.selected = true; sel.add(opt); } } }
@@ -383,6 +412,7 @@ function renderAll(seq) {
     document.getElementById("group-table-container").innerHTML = buildTable(gS, "グループ名", totalS, "group");
     filterStoreByGroup(); filterStaffByStore();
     renderDaily();
+    applyMyStoreOnce();
 }
 
 // 列の並び: グループは GROUP_ORDER、店舗はグループ順→グループ内の順（一覧に無い店舗は最後に名前順）、担当者は店舗の順→名前順
@@ -400,10 +430,12 @@ function updateSelector(id, arr, def) { var sel = document.getElementById(id); v
 
 function buildTable(sum, title, totalS, kind) {
     var keys = orderKeys(Object.keys(sum), kind);
+    // 店舗別は自分の店舗の列を一番左（合計の右）に
+    if (kind === "store" && myStore && keys.indexOf(myStore) > 0) { keys.splice(keys.indexOf(myStore), 1); keys.unshift(myStore); }
     var h = "<table><thead><tr>";
     h += "<th class='sticky-col-item shop-header' style='position: sticky !important; z-index: 300 !important; top: 0; left: 0;'>" + (title || "KPI項目") + "</th>";
     h += "<th class='sticky-col-total shop-header' style='position: sticky !important; z-index: 290 !important; top: 0; left: 170px;'>合計</th>";
-    for(var i=0; i<keys.length; i++) { h += "<th class='shop-header' style='position: sticky !important; z-index: 150 !important; top: 0;'>" + keys[i] + "</th>"; }
+    for(var i=0; i<keys.length; i++) { h += "<th class='shop-header' style='position: sticky !important; z-index: 150 !important; top: 0;'>" + (kind === "store" && keys[i] === myStore ? "<span class='my-store-mark'>★</span>" : "") + keys[i] + "</th>"; }
     h += "</tr></thead><tbody>";
 
     // d2: 2段目（合計）の分母（キーを足し合わせる）。無ければ d と同じ
@@ -834,6 +866,9 @@ function biOpenPage() {
     showPage("budget-page");
     var before = (document.getElementById("bi-month").value || "") + "|" + (document.getElementById("bi-store").value || "");
     biFillSelectors(biTableMonth());
+    // 店舗がまだ選ばれていなければ、自分の店舗を最初の値に（人が選んだ後は変えない）
+    var ssel = document.getElementById("bi-store");
+    if (!ssel.value && myStore && !biMyStoreUsed && Array.prototype.some.call(ssel.options, function(o) { return o.value === myStore; })) { ssel.value = myStore; biMyStoreUsed = true; }
     var now = document.getElementById("bi-month").value + "|" + document.getElementById("bi-store").value;
     if (now !== before || !document.getElementById("budget-table-container").innerHTML) biLoad();
     if (ddPicks === null) ddLoadPicks().then(function() { biFillSelectors(); });
@@ -879,6 +914,7 @@ async function biLoad() {
     var box = document.getElementById("budget-table-container");
     var seq = ++biState.seq;
     biState = { month: month, store: store, rows: [], seq: seq };
+    biAddClose(); // 保存していない「追加」の行は読み直すと消える
     if (!month || !store) { box.innerHTML = ""; biStatus(month ? "店舗を選ぶと表が出ます" : "", ""); return; }
     biInfo("");
     biStatus("担当者を読み込み中…", "");
@@ -1048,6 +1084,62 @@ async function biSaveMany(targets) {
     return n;
 }
 // 前月の同じ店舗の行を、今月の空のセルにだけ入れる（上書きしない）
+// ===== 担当者を追加（表にいない人の行を足す。保存するまでは手元だけ） =====
+var biAddTimer = null, biAddSeq = 0;
+function biAddOpen() {
+    var pop = document.getElementById("bi-add-pop");
+    if (!pop) return;
+    if (!biState.month || !biState.store) { biStatus("先に月と店舗を選んでください", "err"); return; }
+    pop.hidden = false;
+    var q = document.getElementById("bi-add-q");
+    q.value = ""; document.getElementById("bi-add-list").innerHTML = "<div class='bi-add-msg'>名前の一部を2文字以上入れてください</div>";
+    q.focus();
+}
+function biAddClose() { var pop = document.getElementById("bi-add-pop"); if (pop && !pop.hidden) { pop.hidden = true; biAddSeq++; clearTimeout(biAddTimer); } }
+function biAddInput() {
+    clearTimeout(biAddTimer);
+    var q = document.getElementById("bi-add-q").value.trim(), list = document.getElementById("bi-add-list");
+    if (q.length < 2) { biAddSeq++; list.innerHTML = "<div class='bi-add-msg'>名前の一部を2文字以上入れてください</div>"; return; }
+    list.innerHTML = "<div class='bi-add-msg'>探しています…</div>";
+    biAddTimer = setTimeout(function() { biAddSearch(q); }, 300); // 入力が止まって 0.3 秒後に読む
+}
+async function biAddSearch(q) {
+    var seq = ++biAddSeq, list = document.getElementById("bi-add-list"), rows = null, err = null;
+    var like = coqlStr(q).replace(/%/g, "").replace(/_/g, "");
+    try { rows = (await coqlPage("Category = '担当者' and Name like '%" + like + "%'", 0, "Masters", "id, Name, status")).rows; }
+    catch (e) { err = e; }
+    if (seq !== biAddSeq) return;
+    if (err) { list.innerHTML = "<div class='bi-add-msg bi-err'>読み込めませんでした（" + escHtml((err && (err.message || err.code)) || err) + "）</div>"; return; }
+    var shown = {}; biState.rows.forEach(function(r) { if (r.staffId) shown[r.staffId] = true; });
+    var cand = (rows || []).filter(function(m) { return m && m.id && String(m.status || "") !== "退職"; });
+    cand.sort(function(a, b) { return String(a.Name || "").localeCompare(String(b.Name || ""), "ja"); });
+    if (!cand.length) { list.innerHTML = "<div class='bi-add-msg'>見つかりません</div>"; return; }
+    list.innerHTML = cand.map(function(m) {
+        var id = String(m.id), on = shown[id];
+        return "<div class='bi-add-item" + (on ? " bi-add-on" : "") + "' data-id='" + escHtml(id) + "' data-name='" + escHtml(m.Name || "") + "'>" + escHtml(m.Name || ("ID:" + id)) + (on ? "<span class='bi-add-tag'>表示中</span>" : "") + "</div>";
+    }).join("");
+}
+// 選んだ人の行を「（担当者に割り振らない分）」の直前に足す（入力欄は空、注記「追加」）
+function biAddPick(id, name) {
+    if (!id || biState.rows.some(function(r) { return r.staffId === id; })) return;
+    var r = { staffId: id, name: name || ("ID:" + id), note: "追加", rec: null, chain: Promise.resolve() };
+    var at = -1; biState.rows.forEach(function(x, i) { if (at === -1 && !x.staffId) at = i; });
+    if (at === -1) biState.rows.push(r); else biState.rows.splice(at, 0, r);
+    biAddClose();
+    biRender();
+    var el = document.querySelector("#budget-table-container input.bi-input[data-r='" + biState.rows.indexOf(r) + "'][data-c='0']");
+    if (el) el.focus();
+    biStatus("「" + r.name + "」を足しました。値を入れて Enter で保存してください", "ok");
+}
+document.addEventListener("click", function(e) {
+    var pop = document.getElementById("bi-add-pop");
+    if (!pop || pop.hidden || !e.target || !e.target.closest) return;
+    var item = e.target.closest(".bi-add-item");
+    if (item && pop.contains(item)) { if (!item.classList.contains("bi-add-on")) biAddPick(item.getAttribute("data-id"), item.getAttribute("data-name")); return; }
+    if (!pop.contains(e.target) && !e.target.closest("#bi-add")) biAddClose(); // 外側を押したら閉じる
+});
+document.addEventListener("keydown", function(e) { if (e.key === "Escape" || e.key === "Esc") biAddClose(); });
+
 async function biCopyPrev() {
     if (!biState.month || !biState.store) return;
     var seq = biState.seq, prev = biPrevMonth(biState.month), prevRows;

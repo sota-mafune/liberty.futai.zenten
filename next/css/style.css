@@ -97,6 +97,21 @@ td.bud-cell:hover { filter: brightness(0.92); }
 .daily-bar .tab-btn { padding: 3px 10px; }
 #bi-status { font-weight: normal; margin-right: 10px; }
 #bi-info { font-weight: bold; color: #2c3e50; }
+.my-store-mark { font-size: 9px; color: #ffd966; margin-right: 2px; }
+/* 担当者を追加（候補の小窓） */
+.bi-add-wrap { position: relative; display: inline-block; margin-left: 6px; }
+.bi-add-pop { position: absolute; top: 100%; left: 0; z-index: 3000; margin-top: 4px; width: 280px; background: #fff; border: 1px solid #999; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); padding: 6px; font-weight: normal; }
+.bi-add-pop[hidden] { display: none; }
+#bi-add-q { width: 100%; box-sizing: border-box; font-size: 11px; padding: 3px 6px; border: 1px solid #999; border-radius: 3px; }
+#bi-add-list { max-height: 240px; overflow-y: auto; margin-top: 4px; }
+.bi-add-item { padding: 4px 6px; cursor: pointer; font-size: 11px; border-bottom: 1px solid #eee; }
+.bi-add-item:hover { background: #eef4fb; }
+.bi-add-item.bi-add-on { color: #aaa; cursor: default; }
+.bi-add-item.bi-add-on:hover { background: transparent; }
+.bi-add-tag { margin-left: 6px; font-size: 9px; color: #aaa; }
+.bi-add-msg { padding: 4px 6px; font-size: 10px; color: #666; }
+.bi-add-msg.bi-err { color: #c62828; }
+.bi-add-note { margin-top: 4px; font-size: 9px; color: #888; white-space: normal; line-height: 1.4; }
 #bi-status.bi-ok { color: #2e7d32; }
 #bi-status.bi-err { color: #c62828; }
 .bi-hint { font-weight: normal; color: #666; }
