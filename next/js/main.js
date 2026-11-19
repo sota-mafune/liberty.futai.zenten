@@ -669,7 +669,7 @@ function ddOpenFromCell(dd, cat) {
         var amt = 0; list.forEach(function(rec) { amt += ddNum(rec[sp.amount]); });
         subs.push(DD_AMOUNT_LABEL[sp.amount] + "の合計 " + Math.round(amt).toLocaleString() + " ／ 1台あたり " + (list.length ? Math.round(amt / list.length) : 0).toLocaleString());
     }
-    subs.push("行を押すと接客のレコードを開きます");
+    subs.push("行を押すと接客のレコードを新しいタブで開きます");
 
     var h = "<table class='dd-table'><thead><tr><th>接客番号</th><th>管理番号</th><th>お客様名</th><th>来店日</th><th>成約日</th><th>納車日</th><th>店舗</th><th>担当者</th><th>軽/普</th>";
     if (sp.items) h += "<th>数えた項目</th>";
@@ -715,6 +715,10 @@ function ddEnsureModal() {
 function ddClose() { var ov = document.getElementById("dd-overlay"); if (ov && ov.style.display !== "none") { ov.style.display = "none"; ddSeq++; } }
 function ddOpenRecord(id) {
     if (!/^\d+$/.test(String(id || ""))) return;
+    // 表を開いたままにするため、新しいタブで開く（liberty 本番の接客 = CustomModule6）。開けなければ同じ画面で開く
+    var w = null;
+    try { w = window.open("https://crmplus.zoho.jp/crm/org90002333383/tab/CustomModule6/" + id, "_blank"); } catch (e) { w = null; }
+    if (w) return;
     try { var pr = ZOHO.CRM.UI.Record.open({ Entity: "Services", RecordID: id }); if (pr && pr.catch) pr.catch(function(e) { console.error("レコードを開けませんでした:", e); }); } catch (e) { console.error("レコードを開けませんでした:", e); }
 }
 
