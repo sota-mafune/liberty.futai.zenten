@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>全社用ダッシュボード</title>
+    <script src="https://live.zwidgets.com/js-sdk/1.2/ZohoEmbededAppSDK.min.js"></script>
+    <link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+    <div class="tab-menu-container">
+        <div class="tab-btn-group">
+            <button class="tab-btn active" id="btn-group" onclick="showPage('group-page')">📂 グループ別</button>
+            <button class="tab-btn" id="btn-store" onclick="showPage('store-page')">🏢 店舗別</button>
+            <button class="tab-btn" id="btn-staff" onclick="showPage('staff-page')">👤 担当者別</button>
+        </div>
+        <div class="filter-group">
+            <span>📅 月: </span><select id="month-selector" onchange="syncMonthToCalendar()"></select>
+            <input type="date" id="start-date" class="date-input" onchange="fetchByCOQL()"> ～
+            <input type="date" id="end-date" class="date-input" onchange="fetchByCOQL()">
+            <div id="group-filter-area" style="display: none; margin-left:10px;">📂 <select id="group-selector" onchange="filterStoreByGroup()"></select></div>
+            <div id="staff-filter-area" style="display: none; margin-left:10px;">🏢 <select id="store-selector" onchange="filterStaffByStore()"></select></div>
+        </div>
+    </div>
+    <div id="loading">実績を集計しています...</div>
+    <div id="group-page" class="page-content active"><div class="table-wrapper" id="group-table-container"></div></div>
+    <div id="store-page" class="page-content"><div class="table-wrapper" id="store-table-container"></div></div>
+    <div id="staff-page" class="page-content"><div class="table-wrapper" id="staff-table-container"></div></div>
+    <script src="./js/main.js"></script>
+</body>
+</html>
