@@ -1136,7 +1136,7 @@ function biRenderPlan() {
     h += "</tr></tbody></table><div class='bi-note2'>定休日は 0 を入れてください。値を直して Enter で保存すると、" + escHtml(mLabel) + " から適用します（前の月の設定は残ります）</div>";
 
     var M = biMonthM(), man = biManualMap(), plan = budPlan(month, M, wrow, man), disp = budScopeDisp([plan], plan.days);
-    h += "<div class='bi-sec-title'>日別の予算（この店舗・" + escHtml(mLabel) + "）<span class='bi-sec-sub'>月予算 " + M.toLocaleString() + "（成約予算 軽+普）を、手入力の日を除いて曜日の重みで割ります。手入力を空にすると自動に戻ります</span></div>";
+    h += "<div class='bi-sec-title'>日別の予算（この店舗・" + escHtml(mLabel) + "）<span class='bi-sec-sub'>月予算 " + M.toLocaleString() + "（成約予算の合計）を、手入力の日を除いて曜日の重みで割ります。手入力を空にすると自動に戻ります</span></div>";
     if (plan.over > 0) h += "<div class='bi-warn'>手入力の日の合計が月予算を超えています（差 " + plan.over.toLocaleString() + "）。手入力でない日は 0 になります</div>";
     h += "<table class='daily-table bi-table bi-d-table'><thead><tr><th class='shop-header'>日</th><th class='shop-header'>曜日</th><th class='shop-header'>重み</th><th class='shop-header'>自動</th><th class='shop-header'>手入力</th><th class='shop-header'>この日の予算</th></tr></thead><tbody>";
     var tAuto = 0, tMan = 0, tAll = 0;
