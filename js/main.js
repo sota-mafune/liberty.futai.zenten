@@ -560,8 +560,8 @@ function buildTable(sum, title, totalS, kind) {
     // d2: 2段目（合計）の分母（キーを足し合わせる）。無ければ d と同じ
     const rowDef = [
         { sec: "予算・目標" },
-        { lbl: "予算", m: "budget_j", type: "budget_kf", flag: "budget_rows", cls: "#ffffff" },
-        { lbl: "目標", m: "budget_t", type: "budget_kf", flag: "budget_rows", cls: "#ffffff" },
+        { lbl: "予算", m: "budget_j", type: "total_only", flag: "budget_rows", cls: "#ffffff" },
+        { lbl: "目標", m: "budget_t", type: "total_only", flag: "budget_rows", cls: "#ffffff" },
         { lbl: "昨年実績", type: "ly_val", m: "ly_j", cls: "#ffffff" },
         { lbl: "現時点予算", m: "budget_current", type: "total_only", flag: "daily_rows", cls: "#ffffff" },
         { sec: "基本実績" },
@@ -934,8 +934,7 @@ document.addEventListener("click", function(e) {
 
 // ===== 予算入力（販売予算 SalesBudgets を店舗ごとに入れる） =====
 var BI_COLS = [
-    { f: "BudgetKei", lbl: "成約予算 軽" }, { f: "BudgetFu", lbl: "成約予算 普" },
-    { f: "TargetKei", lbl: "成約目標 軽" }, { f: "TargetFu", lbl: "成約目標 普" },
+    { f: "BudgetKei", lbl: "成約予算" }, { f: "TargetKei", lbl: "成約目標" }, // 予算・目標は軽・普に分けない（合計を BudgetKei / TargetKei に入れる。BudgetFu / TargetFu は使わないが、入っていれば合計に足す）
     { f: "DeliveryBudget", lbl: "納車予算" }, { f: "GrossProfitBudget", lbl: "粗利予算（保証込）" }
 ];
 var biState = { month: "", store: "", rows: [], seq: 0 };
